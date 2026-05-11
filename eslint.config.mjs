@@ -10,7 +10,6 @@ const config = tseslint.config(
       ".next/**",
       "common/**",
       "config/**",
-      "test-database/**",
       "*.php"
     ]
   },
