@@ -23,6 +23,7 @@ type StatsShellProps = Readonly<{
   activeSection: ServerSection;
   scopeOptions?: ScopeOption[];
   scopeValue?: string;
+  titleAction?: React.ReactNode;
   children: React.ReactNode;
 }>;
 
@@ -57,6 +58,7 @@ export function StatsShell({
   activeSection,
   scopeOptions,
   scopeValue,
+  titleAction,
   children,
 }: StatsShellProps) {
   const hasServerScope = currentServerId !== null;
@@ -112,7 +114,7 @@ export function StatsShell({
                 </h1>
               </div>
             </div>
-            {battlelogHref || hasScopeSelect ? (
+            {battlelogHref || hasScopeSelect || titleAction ? (
               <div className="flex w-full shrink-0 flex-nowrap items-center justify-end gap-2 sm:w-auto">
                 {hasScopeSelect ? (
                   <ServerScopeSelect
@@ -121,6 +123,7 @@ export function StatsShell({
                     className={`${ui.input} h-9 min-w-0 w-56 max-w-full`}
                   />
                 ) : null}
+                {titleAction}
                 {battlelogHref ? (
                   <a
                     href={battlelogHref}
