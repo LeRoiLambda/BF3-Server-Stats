@@ -55,6 +55,10 @@ function formatRankPosition(rank: number | null, totalPlayers: number): string {
   return `#${rank} of ${totalPlayers}`;
 }
 
+function battlelogPlayerHref(soldierName: string): string {
+  return `https://battlelog.battlefield.com/bf3/user/${encodeURIComponent(soldierName)}/`;
+}
+
 type WeaponCategoryGroup = {
   categoryKey: string;
   categoryName: string;
@@ -187,6 +191,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           }
         ]
       : undefined;
+  const battlelogHref = battlelogPlayerHref(profile.soldierName);
 
   return (
     <StatsShell
@@ -201,6 +206,16 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       activeSection="home"
       scopeOptions={playerScopeOptions}
       scopeValue={playerScopeHref}
+      titleAction={
+        <a
+          href={battlelogHref}
+          target="_blank"
+          rel="noreferrer"
+          className={`${ui.buttonGhost} inline-flex h-9 items-center justify-center text-nowrap`}
+        >
+          Battlelog
+        </a>
+      }
     >
       <section className={`${ui.panel} grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center`}>
         <div className="flex items-center gap-4">
