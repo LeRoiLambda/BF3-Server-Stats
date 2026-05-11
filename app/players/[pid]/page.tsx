@@ -144,7 +144,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       getPlayerModerationSummary({
         playerId,
         serverId: serverScope?.serverId ?? null,
-        recentLimit: 8
+        recentLimit: 5
       })
     ]);
 
@@ -196,11 +196,6 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   return (
     <StatsShell
       title={`Player: ${profile.soldierName}`}
-      subtitle={
-        serverScope
-          ? `Stats for this player on ${serverScope.serverName}.`
-          : "Overall player profile across tracked servers."
-      }
       servers={context.servers}
       currentServerId={serverScope?.serverId ?? null}
       activeSection="home"

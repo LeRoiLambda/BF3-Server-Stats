@@ -39,6 +39,18 @@ function allServersSectionHref(section: ServerSection): string {
   return `/servers/${section}`;
 }
 
+function statsHomeHref(servers: ActiveServer[]): string {
+  if (servers.length === 1) {
+    return sectionHref(servers[0].serverId, "home");
+  }
+
+  if (servers.length > 1) {
+    return allServersSectionHref("home");
+  }
+
+  return "/servers";
+}
+
 function battlelogServerSearchHref(serverName: string): string {
   const params = new URLSearchParams({
     filtered: "1",
@@ -88,6 +100,7 @@ export function StatsShell({
   const effectiveScopeValue = scopeValue ?? selectedScopeHref;
   const hasScopeSelect = scopeOptions ? effectiveScopeOptions.length > 1 : hasMultipleServers;
   const bannerImage = readEnv().BF3_STATS_BANNER_IMAGE;
+  const homeHref = statsHomeHref(servers);
 
   return (
     <main className={ui.pageContainer}>
@@ -95,7 +108,7 @@ export function StatsShell({
         <div className="rounded-t-sm border-b border-slate-600/35 bg-slate-950/90 px-4 py-4 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Link href="/servers" className="inline-flex">
+              <Link href={homeHref} className="inline-flex">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={bannerImage}

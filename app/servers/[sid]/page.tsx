@@ -219,7 +219,6 @@ export default async function ServerHomePage({
           <p className="mt-2 text-base font-semibold text-slate-100">
             {server.usedSlots} / {server.maxSlots}
           </p>
-          <p className="mt-1 text-xs text-slate-400">Live occupancy, 30s refresh</p>
         </article>
 
         <article className={ui.panel}>
@@ -227,7 +226,6 @@ export default async function ServerHomePage({
           <p className="mt-2 text-base font-semibold text-slate-100">
             {overviewStats ? overviewStats.countPlayers : "N/A"}
           </p>
-          <p className="mt-1 text-xs text-slate-400">Historical entries for this server</p>
         </article>
 
         <article className={ui.panel}>
@@ -236,7 +234,6 @@ export default async function ServerHomePage({
             {overviewStats ? overviewStats.avgKdr.toFixed(2) : "N/A"} /{" "}
             {overviewStats ? `${overviewStats.avgHsr.toFixed(2)}%` : "N/A"}
           </p>
-          <p className="mt-1 text-xs text-slate-400">Based on tracked rounds</p>
         </article>
       </section>
 

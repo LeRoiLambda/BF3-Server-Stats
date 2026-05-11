@@ -116,9 +116,6 @@ export function PlayerProfileSections({
             <h2 className={ui.sectionTitle}>
               Weapon Stats
             </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Recorded weapons for the selected category.
-            </p>
           </div>
           <div className="text-sm text-slate-300">
             <span className="font-semibold text-slate-100">{displayedWeapons.length}</span>{" "}
@@ -232,7 +229,7 @@ export function PlayerProfileSections({
         {tagView === "collected" ? (
           !dogtagCollections.available ? (
             <p className="text-sm text-slate-400">
-              Dogtag details are unavailable because `tbl_dogtags` is missing.
+              Dog tags unavailable.
             </p>
           ) : (
             <div className={ui.tableShell}>
@@ -276,7 +273,7 @@ export function PlayerProfileSections({
           )
         ) : !dogtagLosses.available ? (
           <p className="text-sm text-slate-400">
-            Dogtag details are unavailable because `tbl_dogtags` is missing.
+            Dog tags unavailable.
           </p>
         ) : (
           <div className={ui.tableShell}>
