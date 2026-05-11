@@ -157,19 +157,15 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
             </div>
           </div>
 
-          {summary.currentStatus.detail || summary.muteStatus.detail ? (
-            <div className="mt-3 grid gap-2">
-              {summary.currentStatus.detail ? (
-                <p className="rounded-sm border border-slate-700/45 bg-slate-950/35 px-3 py-2 text-sm leading-5 text-slate-300">
-                  {summary.currentStatus.detail}
-                </p>
-              ) : null}
-              {summary.muteStatus.detail ? (
-                <p className="rounded-sm border border-slate-700/45 bg-slate-950/35 px-3 py-2 text-sm leading-5 text-slate-300">
-                  Mute reason: {summary.muteStatus.detail}
-                </p>
-              ) : null}
-            </div>
+          {summary.currentStatus.detail ? (
+                <div className="mt-3 rounded-sm border border-slate-700/45 bg-slate-950/35 px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Latest Ban Message
+                  </p>
+                  <p className="mt-1 text-sm leading-5 text-slate-300">
+                    {summary.currentStatus.detail}
+                  </p>
+                </div>
           ) : null}
 
           <div className="mt-4">

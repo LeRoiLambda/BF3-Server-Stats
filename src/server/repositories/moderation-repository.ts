@@ -76,6 +76,16 @@ export type PlayerModerationInput = {
   recentLimit?: number;
 };
 
+export type ModerationPolicyInput = {
+  serverId: number | null;
+};
+
+export type ModerationPolicy = {
+  available: boolean;
+  combineServerPunishments: boolean;
+  ladders: ModerationLadder[];
+};
+
 type ModerationAvailability = {
   bans: boolean;
   settings: boolean;
@@ -994,5 +1004,27 @@ export async function getPlayerModerationSummary(
     ladders: settings.ladders,
     nextStep: primaryLadder?.steps.find((step) => step.state === "next") ?? null,
     recentActions
+  };
+}
+
+export async function getModerationPolicy(
+  input: ModerationPolicyInput
+): Promise<ModerationPolicy> {
+  const availability = await getModerationAvailability();
+  if (!availability.settings) {
+    return {
+      available: false,
+      combineServerPunishments: true,
+      ladders: []
+    };
+  }
+
+  const settingsRows = await listSettingsRows(input.serverId, availability);
+  const settings = parseSettings(settingsRows, input.serverId, null);
+
+  return {
+    available: settings.ladders.length > 0,
+    combineServerPunishments: settings.combineServerPunishments,
+    ladders: settings.ladders
   };
 }
