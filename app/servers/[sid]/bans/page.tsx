@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { ModerationPolicySection } from "@/components/stats/moderation-policy-section";
 import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getModerationPolicy } from "@/src/server/repositories/moderation-repository";
 import {
   getBannedPlayers,
   parseBanOrder,
@@ -66,14 +68,19 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
     notFound();
   }
 
-  const result = await getBannedPlayers({
-    serverId: server.serverId,
-    gameId: server.gameId,
-    sort,
-    order,
-    page,
-    pageSize: 20
-  });
+  const [result, policy] = await Promise.all([
+    getBannedPlayers({
+      serverId: server.serverId,
+      gameId: server.gameId,
+      sort,
+      order,
+      page,
+      pageSize: 20
+    }),
+    getModerationPolicy({
+      serverId: server.serverId
+    })
+  ]);
 
   return (
     <StatsShell
@@ -83,6 +90,7 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
       currentServerId={server.serverId}
       activeSection="bans"
     >
+      <ModerationPolicySection policy={policy} className="mb-6" />
       <section className={ui.panel}>
         {!result.available ? (
           <p className="text-sm text-slate-300">

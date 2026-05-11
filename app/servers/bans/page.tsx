@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { ModerationPolicySection } from "@/components/stats/moderation-policy-section";
 import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
+import { getModerationPolicy } from "@/src/server/repositories/moderation-repository";
 import {
   getBannedPlayers,
   parseBanOrder,
@@ -37,14 +39,19 @@ export default async function AllServersBansPage({
   const sort = parseBanSort(firstValue(resolvedSearchParams.sort));
   const order = parseBanOrder(firstValue(resolvedSearchParams.order));
   const page = parseBanPage(firstValue(resolvedSearchParams.page));
-  const result = await getBannedPlayers({
-    serverIds: scope.serverIds,
-    gameId: scope.gameId,
-    sort,
-    order,
-    page,
-    pageSize: 20
-  });
+  const [result, policy] = await Promise.all([
+    getBannedPlayers({
+      serverIds: scope.serverIds,
+      gameId: scope.gameId,
+      sort,
+      order,
+      page,
+      pageSize: 20
+    }),
+    getModerationPolicy({
+      serverId: null
+    })
+  ]);
 
   return (
     <StatsShell
@@ -53,6 +60,7 @@ export default async function AllServersBansPage({
       servers={scope.context.servers}
       activeSection="bans"
     >
+      <ModerationPolicySection policy={policy} className="mb-6" />
       <section className={ui.panel}>
         {!result.available ? (
           <p className="text-sm text-slate-300">Ban data is not enabled right now.</p>
