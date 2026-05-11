@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { navButtonClass, ui } from "@/components/layout/stats-ui";
 import { ServerScopeSelect } from "@/components/layout/server-scope-select";
@@ -8,6 +7,7 @@ import {
   sectionLabel,
   type ServerSection,
 } from "@/src/server/routing/sections";
+import { readEnv } from "@/src/server/env";
 import type { ActiveServer } from "@/src/server/repositories/server-repository";
 
 type ScopeOption = {
@@ -85,6 +85,7 @@ export function StatsShell({
   const effectiveScopeOptions = scopeOptions ?? defaultScopeOptions;
   const effectiveScopeValue = scopeValue ?? selectedScopeHref;
   const hasScopeSelect = scopeOptions ? effectiveScopeOptions.length > 1 : hasMultipleServers;
+  const bannerImage = readEnv().BF3_STATS_BANNER_IMAGE;
 
   return (
     <main className={ui.pageContainer}>
@@ -93,13 +94,13 @@ export function StatsShell({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <Link href="/servers" className="inline-flex">
-                <Image
-                  src="/images/bf3-logo.png"
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={bannerImage}
                   alt="Battlefield 3"
                   className="h-9 w-auto sm:h-10"
                   width={240}
                   height={54}
-                  priority
                 />
               </Link>
               <div className="min-w-0">
