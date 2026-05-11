@@ -50,14 +50,11 @@ export default async function AllServersSuspiciousPage({
   return (
     <StatsShell
       title="All Servers - Suspicious Players"
-      subtitle="Players with unusual stats across all servers. Use this as a warning signal, not final proof."
+      subtitle="Statistical outliers, not final proof."
       servers={scope.context.servers}
       activeSection="suspicious"
     >
       <section className={ui.panel}>
-        <p className="mb-4 text-sm text-slate-300">
-          This list flags outliers from historical stats across all active servers.
-        </p>
         <div className={ui.tableShell}>
           <table className={ui.table}>
             <thead className={ui.tableHead}>

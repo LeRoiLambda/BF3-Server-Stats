@@ -86,16 +86,12 @@ export default async function SuspiciousPage({
   return (
     <StatsShell
       title={`${server.serverName} - Suspicious Players`}
-      subtitle="Players with unusual stats. Use this as a warning signal, not final proof."
+      subtitle="Statistical outliers, not final proof."
       servers={context.servers}
       currentServerId={server.serverId}
       activeSection="suspicious"
     >
       <section className={ui.panel}>
-        <p className="mb-4 text-sm text-slate-300">
-          This list flags outliers from historical stats and is not definitive proof.
-        </p>
-
         <div className={ui.tableShell}>
           <table className={ui.table}>
             <thead className={ui.tableHead}>

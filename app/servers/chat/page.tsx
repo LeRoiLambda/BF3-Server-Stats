@@ -60,9 +60,6 @@ export default async function AllServersChatPage({
     >
       <section className={ui.panel}>
         <ChatAutoRefresh intervalMs={60000} />
-        <p className="mb-3 text-xs text-slate-400">
-          Live refresh is enabled every 60 seconds.
-        </p>
         <ChatSearchForm
           basePath="/servers/chat"
           clearHref={allServersHref("chat")}

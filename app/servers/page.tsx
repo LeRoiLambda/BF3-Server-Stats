@@ -11,7 +11,7 @@ export default async function ServersPage() {
   }
 
   if (context.servers.length > 1) {
-    redirect(`/servers/${context.servers[0].serverId}`);
+    redirect("/servers/home");
   }
 
   return (
