@@ -21,7 +21,7 @@ import {
   type CurrentPlayerOrder,
   type CurrentPlayerSort
 } from "@/src/server/repositories/player-stats-repository";
-import { getServerOverviewStats, listTeamScores } from "@/src/server/repositories/server-overview-repository";
+import { listTeamScores } from "@/src/server/repositories/server-overview-repository";
 
 export const revalidate = 30;
 
@@ -147,9 +147,8 @@ export default async function ServerHomePage({
     notFound();
   }
 
-  const [overviewStats, teamScores, topPlayers, weeklyTopPlayers, currentPlayers] =
+  const [teamScores, topPlayers, weeklyTopPlayers, currentPlayers] =
     await Promise.all([
-      getServerOverviewStats(server.serverId),
       listTeamScores(server.serverId),
       getServerLeaderboard({
         serverId: server.serverId,
@@ -178,6 +177,15 @@ export default async function ServerHomePage({
   const teamScoresById = new Map(
     teamScores.map((team) => [team.teamId, team])
   );
+  const activeLiveTeams = liveTeams.filter(({ teamId }) => teamId !== 0);
+  const occupancyPercent =
+    server.maxSlots > 0
+      ? Math.min(100, Math.round((server.usedSlots / server.maxSlots) * 100))
+      : 0;
+  const ticketLeader = activeLiveTeams
+    .map(({ teamId }) => teamScoresById.get(teamId))
+    .filter((score) => score !== undefined)
+    .sort((left, right) => right.score - left.score)[0];
   const selectedTopPlayers = leadersView === "weekly" ? weeklyTopPlayers.players : topPlayers.players;
   const fullLeadersHref =
     leadersView === "weekly"
@@ -187,54 +195,71 @@ export default async function ServerHomePage({
   return (
     <StatsShell
       title={server.serverName}
-      subtitle="Live server snapshot with current players, team tickets, and top performers."
+      subtitle="Current round and live player list."
       servers={context.servers}
       currentServerId={server.serverId}
       activeSection="home"
     >
       <RouteAutoRefresh intervalMs={30000} />
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article className="stats-panel min-w-0 overflow-hidden rounded-sm">
-          <div className="relative aspect-[16/9] min-h-24 bg-slate-900">
+      <section className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
+        <div className="grid min-w-0 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="relative min-h-[150px] bg-slate-900 lg:min-h-full">
             <Image
               src={mapImagePath(server.mapName)}
               alt={formatMapName(server.mapName)}
-              width={320}
-              height={180}
-              className="h-full w-full object-cover"
+              fill
+              sizes="(min-width: 1024px) 260px, 100vw"
+              className="object-cover opacity-85"
               priority
             />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/95 to-transparent px-4 pb-3 pt-10">
-              <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Map</p>
-              <p className="mt-1 text-base font-semibold text-slate-100">
-                {formatMapName(server.mapName)}
-              </p>
-            </div>
+            <div className="absolute inset-0 bg-slate-950/20" />
           </div>
-          <p className="px-4 py-3 text-xs text-slate-400">{formatGamemodeName(server.gameMode)}</p>
-        </article>
+          <div className="min-w-0 p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className={ui.sectionTitle}>Current Round</p>
+              <span className="rounded-sm border border-slate-600/50 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                Refresh 30s
+              </span>
+            </div>
+            <div className="mt-3 min-w-0">
+              <div className="min-w-0">
+                <h2 className="break-words text-2xl font-semibold text-slate-50">
+                  {formatMapName(server.mapName)}
+                </h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  {formatGamemodeName(server.gameMode)}
+                </p>
+              </div>
+            </div>
 
-        <article className={ui.panel}>
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Slots</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">
-            {server.usedSlots} / {server.maxSlots}
-          </p>
-        </article>
-
-        <article className={ui.panel}>
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Total Players</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">
-            {overviewStats ? overviewStats.countPlayers : "N/A"}
-          </p>
-        </article>
-
-        <article className={ui.panel}>
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Avg KDR / HSR</p>
-          <p className="mt-2 text-base font-semibold text-slate-100">
-            {overviewStats ? overviewStats.avgKdr.toFixed(2) : "N/A"} /{" "}
-            {overviewStats ? `${overviewStats.avgHsr.toFixed(2)}%` : "N/A"}
-          </p>
-        </article>
+            <dl className="mt-5 grid overflow-hidden rounded-sm border border-slate-700/60 sm:grid-cols-2">
+              <div className="min-w-0 p-3 sm:p-4">
+                <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
+                  Players
+                </dt>
+                <dd className="mt-2 text-lg font-semibold text-slate-100">
+                  {server.usedSlots} / {server.maxSlots}
+                </dd>
+                <div className="mt-2 h-1.5 rounded-sm bg-slate-800">
+                  <div
+                    className="h-full rounded-sm bg-teal-400/80"
+                    style={{ width: `${occupancyPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div className="min-w-0 border-t border-slate-700/60 p-3 sm:border-l sm:border-t-0 sm:p-4">
+                <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
+                  Ticket Lead
+                </dt>
+                <dd className="mt-2 text-lg font-semibold text-slate-100">
+                  {ticketLeader
+                    ? `${liveTeamName(ticketLeader.teamId, server.gameMode)} · ${ticketLeader.score} tickets`
+                    : "N/A"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
       </section>
 
       <section className="mt-6 grid gap-6">
@@ -248,9 +273,6 @@ export default async function ServerHomePage({
                 {currentPlayers.length} players across {liveTeams.length} active teams
               </p>
             </div>
-            <span className="rounded-sm border border-slate-600/50 bg-slate-950/80 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-              Auto refresh 30s
-            </span>
           </div>
           {currentPlayers.length === 0 ? (
             <p className="text-sm text-slate-300">No players currently online.</p>

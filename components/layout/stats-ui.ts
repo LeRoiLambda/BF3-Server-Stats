@@ -10,7 +10,7 @@ const tableShellBase =
   "w-full min-w-0 max-w-full overflow-x-auto rounded-sm border border-slate-600/35 bg-slate-950/60";
 
 export const ui = {
-  pageContainer: "mx-auto max-w-[1040px] px-3 py-6 sm:px-4 sm:py-8",
+  pageContainer: "mx-auto max-w-[1120px] px-3 py-6 sm:px-4 sm:py-8",
   panel: panelBase,
   card: sectionCardBase,
   cardCompact: `${sectionCardBase} p-3`,
@@ -47,7 +47,7 @@ export function switchButtonClass(selected: boolean): string {
 
 export function navButtonClass(selected: boolean): string {
   return clsx(
-    "rounded-sm border px-3 py-2 text-xs font-medium uppercase tracking-wide transition-colors",
+    "shrink-0 whitespace-nowrap rounded-sm border px-2.5 py-2 text-xs font-medium uppercase tracking-wide transition-colors",
     selected
       ? "border-slate-300/40 bg-slate-700/50 text-slate-50"
       : "border-slate-600 bg-slate-950/80 text-slate-300 hover:border-slate-400 hover:text-slate-100"

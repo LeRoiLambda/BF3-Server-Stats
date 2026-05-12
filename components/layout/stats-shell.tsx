@@ -39,18 +39,6 @@ function allServersSectionHref(section: ServerSection): string {
   return `/servers/${section}`;
 }
 
-function statsHomeHref(servers: ActiveServer[]): string {
-  if (servers.length === 1) {
-    return sectionHref(servers[0].serverId, "home");
-  }
-
-  if (servers.length > 1) {
-    return allServersSectionHref("home");
-  }
-
-  return "/servers";
-}
-
 function battlelogServerSearchHref(serverName: string): string {
   const params = new URLSearchParams({
     filtered: "1",
@@ -98,9 +86,10 @@ export function StatsShell({
   ];
   const effectiveScopeOptions = scopeOptions ?? defaultScopeOptions;
   const effectiveScopeValue = scopeValue ?? selectedScopeHref;
-  const hasScopeSelect = scopeOptions ? effectiveScopeOptions.length > 1 : hasMultipleServers;
+  const hasScopeSelect = scopeOptions
+    ? effectiveScopeOptions.length > 1
+    : hasMultipleServers;
   const bannerImage = readEnv().BF3_STATS_BANNER_IMAGE;
-  const homeHref = statsHomeHref(servers);
 
   return (
     <main className={ui.pageContainer}>
@@ -108,7 +97,14 @@ export function StatsShell({
         <div className="rounded-t-sm border-b border-slate-600/35 bg-slate-950/90 px-4 py-4 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Link href={homeHref} className="inline-flex">
+              <Link
+                href={
+                  hasServerScope
+                    ? sectionHref(currentServerId, "home")
+                    : allServersSectionHref("home")
+                }
+                className="inline-flex"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={bannerImage}
@@ -158,8 +154,8 @@ export function StatsShell({
         </div>
 
         <section className="rounded-b-sm bg-slate-950/70 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <nav className="flex min-w-0 flex-wrap gap-2">
+          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <nav className="flex min-w-0 flex-wrap gap-1.5 xl:flex-nowrap">
               <Link
                 href={
                   hasServerScope
@@ -187,12 +183,14 @@ export function StatsShell({
               })}
             </nav>
 
-            <PlayerProfileSearchForm
-              serverId={currentServerId}
-              inputClassName={`${ui.input} h-8`}
-              inputWrapperClassName="flex-1 lg:w-64"
-              buttonClassName={`${ui.buttonPrimary} shrink-0`}
-            />
+            <div className="flex min-w-0 justify-end xl:shrink-0">
+              <PlayerProfileSearchForm
+                serverId={currentServerId}
+                inputClassName={`${ui.input} h-8`}
+                inputWrapperClassName="flex-1 sm:w-64 sm:flex-none xl:w-52"
+                buttonClassName={`${ui.buttonPrimary} shrink-0`}
+              />
+            </div>
           </div>
         </section>
       </header>
