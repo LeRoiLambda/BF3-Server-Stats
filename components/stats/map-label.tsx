@@ -9,15 +9,19 @@ type MapLabelProps = Readonly<{
 }>;
 
 export function MapLabel({ mapCode }: MapLabelProps) {
+  const imagePath = mapImagePath(mapCode);
+
   return (
     <div className="flex items-center gap-3">
-      <Image
-        src={mapImagePath(mapCode)}
-        alt={formatMapName(mapCode)}
-        width={64}
-        height={36}
-        className="h-8 w-14 rounded-sm border border-slate-700/70 object-cover"
-      />
+      {imagePath ? (
+        <Image
+          src={imagePath}
+          alt={formatMapName(mapCode)}
+          width={120}
+          height={20}
+          className="h-5 w-[120px] rounded-sm border border-slate-700/70 object-cover"
+        />
+      ) : null}
       <span>{formatMapName(mapCode)}</span>
     </div>
   );

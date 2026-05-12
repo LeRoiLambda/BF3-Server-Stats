@@ -72,17 +72,13 @@ export function formatMapName(code: string | null): string {
   return MAP_NAME_BY_CODE[code] ?? code;
 }
 
-export function mapImagePath(code: string | null): string {
-  if (!code) {
-    return "/images/maps/missing.png";
-  }
-
-  const normalized = code.trim();
+export function mapImagePath(code: string | null): string | null {
+  const normalized = code?.trim().toLowerCase();
   if (!normalized) {
-    return "/images/maps/missing.png";
+    return null;
   }
 
-  return `/images/maps/${normalized}.png`;
+  return `/images/maps/${normalized}.jpg`;
 }
 
 const WEAPON_IMAGE_ALIAS: Record<string, string> = {
