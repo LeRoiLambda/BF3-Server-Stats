@@ -191,6 +191,7 @@ export default async function ServerHomePage({
     leadersView === "weekly"
       ? `/servers/${server.serverId}/leaders?view=weekly&scope=server`
       : `/servers/${server.serverId}/leaders?scope=server`;
+  const currentMapImagePath = mapImagePath(server.mapName);
 
   return (
     <StatsShell
@@ -202,63 +203,63 @@ export default async function ServerHomePage({
     >
       <RouteAutoRefresh intervalMs={30000} />
       <section className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
-        <div className="grid min-w-0 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <div className="relative min-h-[150px] bg-slate-900 lg:min-h-full">
+        <div className="relative aspect-[992/164] min-h-[86px] bg-slate-900">
+          {currentMapImagePath ? (
             <Image
-              src={mapImagePath(server.mapName)}
+              src={currentMapImagePath}
               alt={formatMapName(server.mapName)}
               fill
-              sizes="(min-width: 1024px) 260px, 100vw"
-              className="object-cover opacity-85"
+              sizes="(min-width: 1120px) 1120px, 100vw"
+              className="object-cover opacity-90"
               priority
             />
-            <div className="absolute inset-0 bg-slate-950/20" />
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/45 via-slate-950/10 to-slate-950/35" />
+        </div>
+        <div className="min-w-0 p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <p className={ui.sectionTitle}>Current Round</p>
+            <span className="rounded-sm border border-slate-600/50 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+              Refresh 30s
+            </span>
           </div>
-          <div className="min-w-0 p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <p className={ui.sectionTitle}>Current Round</p>
-              <span className="rounded-sm border border-slate-600/50 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-                Refresh 30s
-              </span>
+          <div className="mt-3 min-w-0">
+            <div className="min-w-0">
+              <h2 className="break-words text-2xl font-semibold text-slate-50">
+                {formatMapName(server.mapName)}
+              </h2>
+              <p className="mt-1 text-sm text-slate-300">
+                {formatGamemodeName(server.gameMode)}
+              </p>
             </div>
-            <div className="mt-3 min-w-0">
-              <div className="min-w-0">
-                <h2 className="break-words text-2xl font-semibold text-slate-50">
-                  {formatMapName(server.mapName)}
-                </h2>
-                <p className="mt-1 text-sm text-slate-300">
-                  {formatGamemodeName(server.gameMode)}
-                </p>
-              </div>
-            </div>
+          </div>
 
-            <dl className="mt-5 grid overflow-hidden rounded-sm border border-slate-700/60 sm:grid-cols-2">
-              <div className="min-w-0 p-3 sm:p-4">
-                <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
-                  Players
-                </dt>
-                <dd className="mt-2 text-lg font-semibold text-slate-100">
-                  {server.usedSlots} / {server.maxSlots}
-                </dd>
-                <div className="mt-2 h-1.5 rounded-sm bg-slate-800">
-                  <div
-                    className="h-full rounded-sm bg-teal-400/80"
-                    style={{ width: `${occupancyPercent}%` }}
-                  />
-                </div>
+          <dl className="mt-5 grid overflow-hidden rounded-sm border border-slate-700/60 sm:grid-cols-2">
+            <div className="min-w-0 p-3 sm:p-4">
+              <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
+                Players
+              </dt>
+              <dd className="mt-2 text-lg font-semibold text-slate-100">
+                {server.usedSlots} / {server.maxSlots}
+              </dd>
+              <div className="mt-2 h-1.5 rounded-sm bg-slate-800">
+                <div
+                  className="h-full rounded-sm bg-teal-400/80"
+                  style={{ width: `${occupancyPercent}%` }}
+                />
               </div>
-              <div className="min-w-0 border-t border-slate-700/60 p-3 sm:border-l sm:border-t-0 sm:p-4">
-                <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
-                  Ticket Lead
-                </dt>
-                <dd className="mt-2 text-lg font-semibold text-slate-100">
-                  {ticketLeader
-                    ? `${liveTeamName(ticketLeader.teamId, server.gameMode)} · ${ticketLeader.score} tickets`
-                    : "N/A"}
-                </dd>
-              </div>
-            </dl>
-          </div>
+            </div>
+            <div className="min-w-0 border-t border-slate-700/60 p-3 sm:border-l sm:border-t-0 sm:p-4">
+              <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
+                Ticket Lead
+              </dt>
+              <dd className="mt-2 text-lg font-semibold text-slate-100">
+                {ticketLeader
+                  ? `${liveTeamName(ticketLeader.teamId, server.gameMode)} · ${ticketLeader.score} tickets`
+                  : "N/A"}
+              </dd>
+            </div>
+          </dl>
         </div>
       </section>
 

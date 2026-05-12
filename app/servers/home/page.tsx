@@ -72,23 +72,26 @@ export default async function AllServersHomePage() {
           {scope.context.servers.map((server) => {
             const isOnline = server.connectionState === "on";
             const loadPercent = occupancyPercent(server.usedSlots, server.maxSlots);
+            const serverMapImagePath = mapImagePath(server.mapName);
 
             return (
               <Link
                 key={server.serverId}
                 href={`/servers/${server.serverId}`}
-                className="group grid min-w-0 overflow-hidden rounded-sm border border-slate-600/35 bg-slate-950/65 transition-colors hover:border-slate-400/60 sm:grid-cols-[168px_minmax(0,1fr)]"
+                className="group block min-w-0 overflow-hidden rounded-sm border border-slate-600/35 bg-slate-950/65 transition-colors hover:border-slate-400/60"
               >
-                <div className="relative min-h-[108px] bg-slate-900 sm:min-h-full">
-                  <Image
-                    src={mapImagePath(server.mapName)}
-                    alt={formatMapName(server.mapName)}
-                    fill
-                    sizes="(min-width: 1024px) 168px, 100vw"
-                    className="object-cover opacity-80 transition duration-200 group-hover:scale-[1.02] group-hover:opacity-100"
-                    priority={server.serverId === scope.context.servers[0]?.serverId}
-                  />
-                  <div className="absolute inset-0 bg-slate-950/15" />
+                <div className="relative aspect-[992/164] min-h-[62px] bg-slate-900">
+                  {serverMapImagePath ? (
+                    <Image
+                      src={serverMapImagePath}
+                      alt={formatMapName(server.mapName)}
+                      fill
+                      sizes="(min-width: 1024px) 520px, 100vw"
+                      className="object-cover opacity-80 transition duration-200 group-hover:scale-[1.02] group-hover:opacity-100"
+                      priority={server.serverId === scope.context.servers[0]?.serverId}
+                    />
+                  ) : null}
+                  <div className="absolute inset-0 bg-gradient-to-r from-slate-950/35 via-slate-950/5 to-slate-950/25" />
                 </div>
                 <div className="min-w-0 p-4">
                   <div className="flex min-w-0 items-start justify-between gap-3">
