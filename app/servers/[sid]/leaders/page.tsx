@@ -10,8 +10,8 @@ import { getLegacyServerContext } from "@/src/server/repositories/server-reposit
 import {
   getWeeklyServerLeaderboard,
   getServerLeaderboard,
+  parseLeaderboardPage,
   parseLeaderSort,
-  parsePage,
   parseSortOrder,
   type LeaderSort,
   type SortOrder
@@ -61,17 +61,19 @@ function buildLeadersHref(
   serverId: number,
   sort: LeaderSort,
   order: SortOrder,
-  page: number,
   search: string | null,
-  view: "overall" | "weekly"
+  view: "overall" | "weekly",
+  page: number = 1
 ): string {
   const params = new URLSearchParams();
   params.set("view", view);
   params.set("sort", sort);
   params.set("order", order);
-  params.set("page", String(page));
   if (search) {
     params.set("q", search);
+  }
+  if (page > 1) {
+    params.set("page", String(page));
   }
 
   return `/servers/${serverId}/leaders?${params.toString()}`;
@@ -91,7 +93,7 @@ export default async function LeadersPage({
   const view = firstValue(resolvedSearchParams.view) === "weekly" ? "weekly" : "overall";
   const sort = parseLeaderSort(firstValue(resolvedSearchParams.sort));
   const order = parseSortOrder(firstValue(resolvedSearchParams.order));
-  const page = parsePage(firstValue(resolvedSearchParams.page));
+  const page = parseLeaderboardPage(firstValue(resolvedSearchParams.page));
   const search = firstValue(resolvedSearchParams.q)?.trim() || null;
 
   const context = await getLegacyServerContext();
@@ -188,7 +190,6 @@ export default async function LeadersPage({
                       server.serverId,
                       sortKey,
                       nextOrder(sort, sortKey, order),
-                      1,
                       search,
                       "overall"
                     );
@@ -244,7 +245,9 @@ export default async function LeadersPage({
                     <td className={ui.td}>
                       {view === "weekly"
                         ? index + 1
-                        : ((result?.page ?? 1) - 1) * (result?.pageSize ?? 20) + index + 1}
+                        : result
+                          ? (result.page - 1) * result.pageSize + index + 1
+                          : index + 1}
                     </td>
                     <td className={ui.td}>
                       <PlayerLink
@@ -276,14 +279,15 @@ export default async function LeadersPage({
             page={result.page}
             totalPages={result.totalPages}
             totalLabel={`${result.totalRows} players`}
+            hasNextPage={result.hasNextPage}
             getPageHref={(targetPage) =>
               buildLeadersHref(
                 server.serverId,
                 sort,
                 order,
-                targetPage,
                 search,
-                "overall"
+                "overall",
+                targetPage
               )
             }
           />

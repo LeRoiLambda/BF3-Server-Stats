@@ -8,8 +8,8 @@ import { PlayerLink } from "@/components/stats/player-link";
 import {
   getAllServersLeaderboard,
   getAllServersWeeklyLeaderboard,
+  parseLeaderboardPage,
   parseLeaderSort,
-  parsePage,
   parseSortOrder,
   type LeaderSort
 } from "@/src/server/repositories/player-stats-repository";
@@ -42,7 +42,7 @@ export default async function AllServersLeadersPage({
   const view = firstValue(resolvedSearchParams.view) === "weekly" ? "weekly" : "overall";
   const sort = parseLeaderSort(firstValue(resolvedSearchParams.sort));
   const order = parseSortOrder(firstValue(resolvedSearchParams.order));
-  const page = parsePage(firstValue(resolvedSearchParams.page));
+  const page = parseLeaderboardPage(firstValue(resolvedSearchParams.page));
   const search = firstValue(resolvedSearchParams.q)?.trim() || null;
 
   const [result, weeklyResult] = await Promise.all([
@@ -125,7 +125,6 @@ export default async function AllServersLeadersPage({
                       order,
                       sortKey === "soldierName" ? "asc" : "desc"
                     ),
-                    page: 1,
                     q: search
                   });
                   const isActive = view === "overall" && sort === sortKey;
@@ -167,9 +166,9 @@ export default async function AllServersLeadersPage({
                   (player, index) => (
                     <tr key={player.playerId} className={ui.tableRow}>
                       <td className={ui.td}>
-                        {view === "weekly"
+                        {view === "weekly" || !result
                           ? index + 1
-                          : ((result?.page ?? 1) - 1) * (result?.pageSize ?? 20) + index + 1}
+                          : (result.page - 1) * result.pageSize + index + 1}
                       </td>
                       <td className={ui.td}>
                         <PlayerLink
@@ -198,13 +197,14 @@ export default async function AllServersLeadersPage({
             page={result.page}
             totalPages={result.totalPages}
             totalLabel={`${result.totalRows} players`}
+            hasNextPage={result.hasNextPage}
             getPageHref={(targetPage) =>
               allServersHref("leaders", {
                 view,
                 sort,
                 order,
-                page: targetPage,
-                q: search
+                q: search,
+                page: targetPage
               })
             }
           />

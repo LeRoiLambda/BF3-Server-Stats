@@ -6,8 +6,8 @@ import { PlayerLink } from "@/components/stats/player-link";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
   getSuspiciousPlayers,
-  parseSuspiciousOrder,
   parseSuspiciousPage,
+  parseSuspiciousOrder,
   parseSuspiciousSort,
   type SuspiciousOrder,
   type SuspiciousSort
@@ -44,12 +44,14 @@ function buildSuspiciousHref(
   serverId: number,
   sort: SuspiciousSort,
   order: SuspiciousOrder,
-  page: number
+  page: number = 1
 ): string {
   const params = new URLSearchParams();
   params.set("sort", sort);
   params.set("order", order);
-  params.set("page", String(page));
+  if (page > 1) {
+    params.set("page", String(page));
+  }
   return `/servers/${serverId}/suspicious?${params.toString()}`;
 }
 
@@ -101,8 +103,7 @@ export default async function SuspiciousPage({
                   const href = buildSuspiciousHref(
                     server.serverId,
                     sortKey,
-                    nextOrder(sort, sortKey, order),
-                    1
+                    nextOrder(sort, sortKey, order)
                   );
                   const isActive = sort === sortKey;
 
@@ -163,6 +164,7 @@ export default async function SuspiciousPage({
           page={result.page}
           totalPages={result.totalPages}
           totalLabel={`${result.totalRows} players`}
+          hasNextPage={result.hasNextPage}
           getPageHref={(targetPage) =>
             buildSuspiciousHref(server.serverId, sort, order, targetPage)
           }

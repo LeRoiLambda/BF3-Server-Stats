@@ -9,8 +9,8 @@ import { SubsetBadge } from "@/components/stats/subset-badge";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
   getServerChatLog,
-  parseChatOrder,
   parseChatPage,
+  parseChatOrder,
   parseChatSort,
   type ChatOrder,
   type ChatSort
@@ -42,15 +42,17 @@ function buildChatHref(
   serverId: number,
   sort: ChatSort,
   order: ChatOrder,
-  page: number,
-  query: string | null
+  query: string | null,
+  page: number = 1
 ): string {
   const params = new URLSearchParams();
   params.set("sort", sort);
   params.set("order", order);
-  params.set("page", String(page));
   if (query) {
     params.set("q", query);
+  }
+  if (page > 1) {
+    params.set("page", String(page));
   }
 
   return `/servers/${serverId}/chat?${params.toString()}`;
@@ -120,7 +122,6 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                       server.serverId,
                       sortKey,
                       nextOrder(sort, sortKey, order),
-                      1,
                       query
                     );
                     const isActive = sort === sortKey;
@@ -144,7 +145,6 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                         server.serverId,
                         "message",
                         nextOrder(sort, "message", order),
-                        1,
                         query
                       )}
                       className={sortableHeadingClass(sort === "message")}
@@ -201,9 +201,9 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
         <StatsPager
           page={result.page}
           totalPages={result.totalPages}
-          totalLabel={`${result.totalRows} entries`}
+          hasNextPage={result.hasNextPage}
           getPageHref={(targetPage) =>
-            buildChatHref(server.serverId, sort, order, targetPage, query)
+            buildChatHref(server.serverId, sort, order, query, targetPage)
           }
         />
       </section>

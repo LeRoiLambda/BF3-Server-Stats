@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
-import { toFixedNumber, toNumber } from "@/src/server/utils/numbers";
+import { toFixedNumber } from "@/src/server/utils/numbers";
 
 export type SuspiciousSort = "soldierName" | "kdr" | "hsr" | "rounds";
 export type SuspiciousOrder = "asc" | "desc";
@@ -33,10 +33,7 @@ export type SuspiciousResult = {
   totalPages: number;
   page: number;
   pageSize: number;
-};
-
-type CountRow = RowDataPacket & {
-  totalRows: number;
+  hasNextPage: boolean;
 };
 
 type SuspiciousRow = RowDataPacket & {
@@ -49,11 +46,15 @@ type SuspiciousRow = RowDataPacket & {
   banStatus?: string | null;
 };
 
+type CountRow = RowDataPacket & {
+  totalRows: number;
+};
+
 const SORT_SQL: Record<SuspiciousSort, string> = {
   soldierName: "tpd.SoldierName",
-  kdr: "(SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0))",
-  hsr: "(SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0))",
-  rounds: "SUM(tps.Rounds)"
+  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
+  hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)",
+  rounds: "COALESCE(SUM(tps.Rounds), 0)"
 };
 
 const SUSPICIOUS_HAVING_SQL = `
@@ -112,19 +113,47 @@ export function parseSuspiciousPage(value: string | null): number {
   return normalizePage(Number.parseInt(value, 10));
 }
 
+function suspiciousOrderBy(
+  sort: SuspiciousSort,
+  order: SuspiciousOrder
+): string {
+  const orderSql = order.toUpperCase();
+
+  if (sort === "soldierName") {
+    return `${SORT_SQL.soldierName} ${orderSql}, tpd.PlayerID ASC`;
+  }
+
+  return `${SORT_SQL[sort]} ${orderSql}, tpd.SoldierName ASC, tpd.PlayerID ASC`;
+}
+
+function toSuspiciousPlayer(row: SuspiciousRow): SuspiciousPlayer {
+  return {
+    playerId: Number(row.playerId),
+    soldierName: row.soldierName,
+    countryCode: row.countryCode,
+    rounds: Number(row.rounds ?? 0),
+    kdr: toFixedNumber(row.kdr),
+    hsr: toFixedNumber(row.hsr),
+    banStatus:
+      row.banStatus === "Active"
+        ? "active"
+        : row.banStatus === "Expired"
+          ? "expired"
+          : null
+  };
+}
+
 export async function getSuspiciousPlayers(
   input: SuspiciousQueryInput
 ): Promise<SuspiciousResult> {
   const pool = getDbPool();
   const sort = normalizeSort(input.sort);
   const order = normalizeOrder(input.order);
-  const page = normalizePage(input.page);
+  const requestedPage = normalizePage(input.page);
   const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
-  const sortExpression = SORT_SQL[sort];
-  const orderSql = order.toUpperCase();
-  const secondaryOrderSql = order === "asc" ? "DESC" : "ASC";
   const scope = buildServerScopeCondition("tsp.ServerID", input);
 
+  const countParams: Array<string | number> = [...scope.params, input.gameId];
   const [countRows] = await pool.query<CountRow[]>(
     `
       SELECT COUNT(*) AS totalRows
@@ -139,24 +168,23 @@ export async function getSuspiciousPlayers(
         HAVING ${SUSPICIOUS_HAVING_SQL}
       ) suspicious_players
     `,
-    [...scope.params, input.gameId]
+    countParams
   );
-
   const totalRows = Number(countRows[0]?.totalRows ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const boundedPage = Math.min(page, totalPages);
-  const offset = (boundedPage - 1) * pageSize;
+  const page = Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
 
   const adkatsAvailable = await hasTable("adkats_bans");
-  const [rows] = await pool.query<SuspiciousRow[]>(
-    `
+  const params: Array<string | number | null> = [...scope.params, input.gameId];
+  const sql = `
       SELECT
         tpd.PlayerID AS playerId,
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
         SUM(tps.Rounds) AS rounds,
         (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
-        (SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) AS hsr
+        ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_playerstats tps
       INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
@@ -166,30 +194,19 @@ export async function getSuspiciousPlayers(
         AND tpd.GameID = ?
       GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
       HAVING ${SUSPICIOUS_HAVING_SQL}
-      ORDER BY ${sortExpression} ${orderSql}, tpd.SoldierName ${secondaryOrderSql}
+      ORDER BY ${suspiciousOrderBy(sort, order)}
       LIMIT ? OFFSET ?
-    `,
-    [...scope.params, input.gameId, pageSize, offset]
-  );
+    `;
+  params.push(pageSize, offset);
+
+  const [rows] = await pool.query<SuspiciousRow[]>(sql, params);
 
   return {
-    players: rows.map((row) => ({
-      playerId: Number(row.playerId),
-      soldierName: row.soldierName,
-      countryCode: row.countryCode,
-      rounds: Number(row.rounds ?? 0),
-      kdr: toFixedNumber(row.kdr),
-      hsr: toFixedNumber(toNumber(row.hsr) * 100),
-      banStatus:
-        row.banStatus === "Active"
-          ? "active"
-          : row.banStatus === "Expired"
-            ? "expired"
-            : null
-    })),
+    players: rows.map(toSuspiciousPlayer),
     totalRows,
     totalPages,
-    page: boundedPage,
-    pageSize
+    page,
+    pageSize,
+    hasNextPage: page < totalPages
   };
 }

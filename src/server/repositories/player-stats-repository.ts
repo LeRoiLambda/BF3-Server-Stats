@@ -45,15 +45,12 @@ export type LeaderboardResult = {
   totalPages: number;
   page: number;
   pageSize: number;
+  hasNextPage: boolean;
 };
 
 export type WeeklyLeaderboardResult = {
   available: boolean;
   players: LeaderboardPlayer[];
-};
-
-type CountRow = RowDataPacket & {
-  totalRows: number;
 };
 
 type PlayerRow = RowDataPacket & {
@@ -65,6 +62,10 @@ type PlayerRow = RowDataPacket & {
   kdr: number | null;
   hsr: number | null;
   banStatus?: string | null;
+};
+
+type CountRow = RowDataPacket & {
+  totalRows: number;
 };
 
 type CurrentPlayerRow = RowDataPacket & {
@@ -93,18 +94,18 @@ export type CurrentPlayer = {
 
 const SORT_SQL: Record<LeaderSort, string> = {
   soldierName: "tpd.SoldierName",
-  score: "tps.Score",
-  kills: "tps.Kills",
-  kdr: "(tps.Kills / NULLIF(tps.Deaths, 0))",
-  hsr: "(tps.Headshots / NULLIF(tps.Kills, 0))"
+  score: "COALESCE(tps.Score, 0)",
+  kills: "COALESCE(tps.Kills, 0)",
+  kdr: "COALESCE((tps.Kills / NULLIF(tps.Deaths, 0)), 0)",
+  hsr: "COALESCE(((tps.Headshots / NULLIF(tps.Kills, 0)) * 100), 0)"
 };
 
 const ALL_SERVERS_SORT_SQL: Record<LeaderSort, string> = {
   soldierName: "tpd.SoldierName",
-  score: "SUM(tps.Score)",
-  kills: "SUM(tps.Kills)",
-  kdr: "(SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0))",
-  hsr: "((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100)"
+  score: "COALESCE(SUM(tps.Score), 0)",
+  kills: "COALESCE(SUM(tps.Kills), 0)",
+  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
+  hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)"
 };
 
 const CURRENT_PLAYER_SORT_SQL: Record<CurrentPlayerSort, string> = {
@@ -185,13 +186,12 @@ export function parseSortOrder(value: string | null): SortOrder {
   return normalizeOrder(value);
 }
 
-export function parsePage(value: string | null): number {
+export function parseLeaderboardPage(value: string | null): number {
   if (!value) {
     return 1;
   }
 
-  const parsed = Number.parseInt(value, 10);
-  return normalizePage(parsed);
+  return normalizePage(Number.parseInt(value, 10));
 }
 
 export function parseCurrentPlayerSort(value: string | null): CurrentPlayerSort {
@@ -202,20 +202,53 @@ export function parseCurrentPlayerOrder(value: string | null): CurrentPlayerOrde
   return normalizeCurrentPlayerOrder(value);
 }
 
+function leaderboardOrderBy(
+  sort: LeaderSort,
+  order: SortOrder,
+  aggregate: boolean
+): string {
+  const sortSql = aggregate ? ALL_SERVERS_SORT_SQL[sort] : SORT_SQL[sort];
+  const orderSql = order.toUpperCase();
+
+  if (sort === "soldierName") {
+    return `${sortSql} ${orderSql}, tpd.PlayerID ASC`;
+  }
+
+  return `${sortSql} ${orderSql}, tpd.SoldierName ASC, tpd.PlayerID ASC`;
+}
+
+function toLeaderboardPlayer(row: PlayerRow): LeaderboardPlayer {
+  return {
+    playerId: Number(row.playerId),
+    soldierName: row.soldierName,
+    countryCode: row.countryCode,
+    score: Number(row.score ?? 0),
+    kills: Number(row.kills ?? 0),
+    kdr: toFixedNumber(row.kdr),
+    hsr: toFixedNumber(row.hsr),
+    banStatus:
+      row.banStatus === "Active"
+        ? "active"
+        : row.banStatus === "Expired"
+          ? "expired"
+          : null
+  };
+}
+
 export async function getServerLeaderboard(
   input: LeaderboardQueryInput
 ): Promise<LeaderboardResult> {
   const pool = getDbPool();
-
   const sort = normalizeSort(input.sort);
   const order = normalizeOrder(input.order);
-  const page = normalizePage(input.page);
+  const requestedPage = normalizePage(input.page);
   const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   const search = input.search?.trim() ? input.search.trim() : null;
-  const sortExpression = SORT_SQL[sort];
-  const orderSql = order.toUpperCase();
 
-  const countParams: Array<string | number> = [input.serverId, input.gameId];
+  const countParams: Array<string | number> = [
+    input.serverId,
+    input.gameId
+  ];
   let countSql = `
     SELECT COUNT(*) AS totalRows
     FROM tbl_playerstats tps
@@ -233,12 +266,13 @@ export async function getServerLeaderboard(
   const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
   const totalRows = Number(countRows[0]?.totalRows ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const boundedPage = Math.min(page, totalPages);
-  const boundedOffset = (boundedPage - 1) * pageSize;
-
+  const page = Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
   const adkatsAvailable = await hasAdkatsBansTable();
-  const leaderParams: Array<string | number> = [input.serverId, input.gameId];
-
+  const leaderParams: Array<string | number | null> = [
+    input.serverId,
+    input.gameId
+  ];
   let leaderSql = `
     SELECT
       tpd.PlayerID AS playerId,
@@ -263,33 +297,20 @@ export async function getServerLeaderboard(
   }
 
   leaderSql += `
-    ORDER BY ${sortExpression} ${orderSql}, tpd.SoldierName ASC
+    ORDER BY ${leaderboardOrderBy(sort, order, false)}
     LIMIT ? OFFSET ?
   `;
-  leaderParams.push(pageSize, boundedOffset);
+  leaderParams.push(pageSize, offset);
 
   const [rows] = await pool.query<PlayerRow[]>(leaderSql, leaderParams);
 
   return {
-    players: rows.map((row) => ({
-      playerId: Number(row.playerId),
-      soldierName: row.soldierName,
-      countryCode: row.countryCode,
-      score: Number(row.score ?? 0),
-      kills: Number(row.kills ?? 0),
-      kdr: toFixedNumber(row.kdr),
-      hsr: toFixedNumber(row.hsr),
-      banStatus:
-        row.banStatus === "Active"
-          ? "active"
-          : row.banStatus === "Expired"
-            ? "expired"
-            : null
-    })),
+    players: rows.map(toLeaderboardPlayer),
     totalRows,
     totalPages,
-    page: boundedPage,
-    pageSize
+    page,
+    pageSize,
+    hasNextPage: page < totalPages
   };
 }
 
@@ -310,18 +331,17 @@ export async function getAllServersLeaderboard(
       totalRows: 0,
       totalPages: 1,
       page: 1,
-      pageSize: Math.max(1, Math.min(100, Math.floor(input.pageSize)))
+      pageSize: Math.max(1, Math.min(100, Math.floor(input.pageSize))),
+      hasNextPage: false
     };
   }
 
   const pool = getDbPool();
   const sort = normalizeSort(input.sort);
   const order = normalizeOrder(input.order);
-  const page = normalizePage(input.page);
+  const requestedPage = normalizePage(input.page);
   const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   const search = input.search?.trim() ? input.search.trim() : null;
-  const sortExpression = ALL_SERVERS_SORT_SQL[sort];
-  const orderSql = order.toUpperCase();
   const serverPlaceholders = serverIds.map(() => "?").join(", ");
 
   const countParams: Array<string | number> = [...serverIds, input.gameId];
@@ -342,11 +362,14 @@ export async function getAllServersLeaderboard(
   const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
   const totalRows = Number(countRows[0]?.totalRows ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const boundedPage = Math.min(page, totalPages);
-  const boundedOffset = (boundedPage - 1) * pageSize;
+  const page = Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
 
   const adkatsAvailable = await hasAdkatsBansTable();
-  const leaderParams: Array<string | number> = [...serverIds, input.gameId];
+  const leaderParams: Array<string | number | null> = [
+    ...serverIds,
+    input.gameId
+  ];
 
   let leaderSql = `
     SELECT
@@ -373,33 +396,23 @@ export async function getAllServersLeaderboard(
 
   leaderSql += `
     GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
-    ORDER BY ${sortExpression} ${orderSql}, tpd.SoldierName ASC
+  `;
+
+  leaderSql += `
+    ORDER BY ${leaderboardOrderBy(sort, order, true)}
     LIMIT ? OFFSET ?
   `;
-  leaderParams.push(pageSize, boundedOffset);
+  leaderParams.push(pageSize, offset);
 
   const [rows] = await pool.query<PlayerRow[]>(leaderSql, leaderParams);
 
   return {
-    players: rows.map((row) => ({
-      playerId: Number(row.playerId),
-      soldierName: row.soldierName,
-      countryCode: row.countryCode,
-      score: Number(row.score ?? 0),
-      kills: Number(row.kills ?? 0),
-      kdr: toFixedNumber(row.kdr),
-      hsr: toFixedNumber(row.hsr),
-      banStatus:
-        row.banStatus === "Active"
-          ? "active"
-          : row.banStatus === "Expired"
-            ? "expired"
-            : null
-    })),
+    players: rows.map(toLeaderboardPlayer),
     totalRows,
     totalPages,
-    page: boundedPage,
-    pageSize
+    page,
+    pageSize,
+    hasNextPage: page < totalPages
   };
 }
 
