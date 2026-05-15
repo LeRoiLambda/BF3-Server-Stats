@@ -7,8 +7,8 @@ import { PlayerLink } from "@/components/stats/player-link";
 import { getModerationPolicy } from "@/src/server/repositories/moderation-repository";
 import {
   getBannedPlayers,
-  parseBanOrder,
   parseBanPage,
+  parseBanOrder,
   parseBanSort,
   type BanSort
 } from "@/src/server/repositories/bans-repository";
@@ -81,8 +81,7 @@ export default async function AllServersBansPage({
                               sortKey,
                               order,
                               sortKey === "soldierName" ? "asc" : "desc"
-                            ),
-                            page: 1
+                            )
                           })}
                           className={sortableHeadingClass(sort === sortKey)}
                         >
@@ -104,7 +103,9 @@ export default async function AllServersBansPage({
                   ) : (
                     result.players.map((player, index) => (
                       <tr key={player.playerId} className={ui.tableRow}>
-                        <td className={ui.td}>{(result.page - 1) * result.pageSize + index + 1}</td>
+                        <td className={ui.td}>
+                          {(result.page - 1) * result.pageSize + index + 1}
+                        </td>
                         <td className={ui.td}>
                           <PlayerLink
                             playerId={player.playerId}
@@ -127,6 +128,7 @@ export default async function AllServersBansPage({
               page={result.page}
               totalPages={result.totalPages}
               totalLabel={`${result.totalRows} bans`}
+              hasNextPage={result.hasNextPage}
               getPageHref={(targetPage) =>
                 allServersHref("bans", {
                   sort,

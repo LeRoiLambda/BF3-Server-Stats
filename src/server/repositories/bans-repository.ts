@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
-import { toFixedNumber, toNumber } from "@/src/server/utils/numbers";
+import { toFixedNumber } from "@/src/server/utils/numbers";
 
 export type BanSort = "soldierName" | "kdr" | "hsr";
 export type BanOrder = "asc" | "desc";
@@ -33,10 +33,7 @@ export type BansResult = {
   totalPages: number;
   page: number;
   pageSize: number;
-};
-
-type CountRow = RowDataPacket & {
-  totalRows: number;
+  hasNextPage: boolean;
 };
 
 type BannedRow = RowDataPacket & {
@@ -48,10 +45,14 @@ type BannedRow = RowDataPacket & {
   reason?: string | null;
 };
 
+type CountRow = RowDataPacket & {
+  totalRows: number;
+};
+
 const SORT_SQL: Record<BanSort, string> = {
   soldierName: "tpd.SoldierName",
-  kdr: "(SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0))",
-  hsr: "(SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0))"
+  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
+  hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)"
 };
 
 function normalizeSort(value: string | null): BanSort {
@@ -93,31 +94,51 @@ export function parseBanPage(value: string | null): number {
   return normalizePage(Number.parseInt(value, 10));
 }
 
+function banOrderBy(sort: BanSort, order: BanOrder): string {
+  const orderSql = order.toUpperCase();
+
+  if (sort === "soldierName") {
+    return `${SORT_SQL.soldierName} ${orderSql}, tpd.PlayerID ASC`;
+  }
+
+  return `${SORT_SQL[sort]} ${orderSql}, tpd.SoldierName ASC, tpd.PlayerID ASC`;
+}
+
+function toBannedPlayer(row: BannedRow): BannedPlayer {
+  return {
+    playerId: Number(row.playerId),
+    soldierName: row.soldierName,
+    countryCode: row.countryCode,
+    kdr: toFixedNumber(row.kdr),
+    hsr: toFixedNumber(row.hsr),
+    reason: row.reason ? row.reason : null
+  };
+}
+
 export async function getBannedPlayers(
   input: BansQueryInput
 ): Promise<BansResult> {
   const adkatsAvailable = await hasTable("adkats_bans");
+  const sort = normalizeSort(input.sort);
+  const order = normalizeOrder(input.order);
+  const requestedPage = normalizePage(input.page);
+  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   if (!adkatsAvailable) {
     return {
-      available: false,
       players: [],
       totalRows: 0,
       totalPages: 1,
       page: 1,
-      pageSize: input.pageSize
+      pageSize,
+      hasNextPage: false,
+      available: false
     };
   }
 
   const pool = getDbPool();
-  const sort = normalizeSort(input.sort);
-  const order = normalizeOrder(input.order);
-  const page = normalizePage(input.page);
-  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
-  const sortExpression = SORT_SQL[sort];
-  const orderSql = order.toUpperCase();
-  const secondaryOrderSql = order === "asc" ? "DESC" : "ASC";
   const scope = buildServerScopeCondition("tsp.ServerID", input);
 
+  const countParams: Array<string | number> = [...scope.params, input.gameId];
   const [countRows] = await pool.query<CountRow[]>(
     `
       SELECT COUNT(*) AS totalRows
@@ -133,23 +154,22 @@ export async function getBannedPlayers(
         GROUP BY tpd.PlayerID
       ) banned_players
     `,
-    [...scope.params, input.gameId]
+    countParams
   );
-
   const totalRows = Number(countRows[0]?.totalRows ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const boundedPage = Math.min(page, totalPages);
-  const offset = (boundedPage - 1) * pageSize;
+  const page = Math.min(requestedPage, totalPages);
+  const offset = (page - 1) * pageSize;
 
   const adkatsRecordsAvailable = await hasTable("adkats_records_main");
-  const [rows] = await pool.query<BannedRow[]>(
-    `
+  const params: Array<string | number | null> = [...scope.params, input.gameId];
+  const sql = `
       SELECT
         tpd.PlayerID AS playerId,
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
         (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
-        (SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) AS hsr
+        ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr
         ${adkatsRecordsAvailable ? ", abr.record_message AS reason" : ""}
       FROM tbl_playerdata tpd
       INNER JOIN tbl_server_player tsp ON tsp.PlayerID = tpd.PlayerID
@@ -160,25 +180,20 @@ export async function getBannedPlayers(
         AND tpd.GameID = ?
         AND adk.ban_status = 'Active'
       GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsRecordsAvailable ? ", abr.record_message" : ""}
-      ORDER BY ${sortExpression} ${orderSql}, tpd.SoldierName ${secondaryOrderSql}
+      ORDER BY ${banOrderBy(sort, order)}
       LIMIT ? OFFSET ?
-    `,
-    [...scope.params, input.gameId, pageSize, offset]
-  );
+    `;
+  params.push(pageSize, offset);
+
+  const [rows] = await pool.query<BannedRow[]>(sql, params);
 
   return {
-    available: true,
-    players: rows.map((row) => ({
-      playerId: Number(row.playerId),
-      soldierName: row.soldierName,
-      countryCode: row.countryCode,
-      kdr: toFixedNumber(row.kdr),
-      hsr: toFixedNumber(toNumber(row.hsr) * 100),
-      reason: row.reason ? row.reason : null
-    })),
+    players: rows.map(toBannedPlayer),
     totalRows,
     totalPages,
-    page: boundedPage,
-    pageSize
+    page,
+    pageSize,
+    hasNextPage: page < totalPages,
+    available: true
   };
 }

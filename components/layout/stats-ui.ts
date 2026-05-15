@@ -67,15 +67,6 @@ export function sortableHeadingClass(active: boolean): string {
   );
 }
 
-export function pagerClass(disabled: boolean): string {
-  return clsx(
-    "rounded-sm border px-2 py-1",
-    disabled
-      ? "pointer-events-none border-slate-800 text-slate-600"
-      : "border-slate-600 bg-slate-900 text-slate-200 hover:border-slate-400"
-  );
-}
-
 export function banTagClass(status: string | null): string {
   if (!status) {
     return "";

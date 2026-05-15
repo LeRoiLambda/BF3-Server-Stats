@@ -8,8 +8,8 @@ import { PlayerLink } from "@/components/stats/player-link";
 import { SubsetBadge } from "@/components/stats/subset-badge";
 import {
   getServerChatLog,
-  parseChatOrder,
   parseChatPage,
+  parseChatOrder,
   parseChatSort,
   type ChatSort
 } from "@/src/server/repositories/chat-repository";
@@ -88,7 +88,6 @@ export default async function AllServersChatPage({
                           order,
                           sortKey === "date" ? "desc" : "asc"
                         ),
-                        page: 1,
                         q: query
                       })}
                       className={sortableHeadingClass(sort === sortKey)}
@@ -105,7 +104,6 @@ export default async function AllServersChatPage({
                     href={allServersHref("chat", {
                       sort: "message",
                       order: nextOrder(sort, "message", order, "asc"),
-                      page: 1,
                       q: query
                     })}
                     className={sortableHeadingClass(sort === "message")}
@@ -123,7 +121,9 @@ export default async function AllServersChatPage({
               ) : (
                 result.entries.map((entry, index) => (
                   <tr key={entry.id} className={ui.tableRow}>
-                    <td className={ui.td}>{(result.page - 1) * result.pageSize + index + 1}</td>
+                    <td className={ui.td}>
+                      {(result.page - 1) * result.pageSize + index + 1}
+                    </td>
                     <td className={`${ui.td} whitespace-nowrap`}>{entry.logDate}</td>
                     <td className={`${ui.td} whitespace-nowrap`}>
                       <PlayerLink
@@ -151,13 +151,13 @@ export default async function AllServersChatPage({
         <StatsPager
           page={result.page}
           totalPages={result.totalPages}
-          totalLabel={`${result.totalRows} entries`}
+          hasNextPage={result.hasNextPage}
           getPageHref={(targetPage) =>
             allServersHref("chat", {
               sort,
               order,
-              page: targetPage,
-              q: query
+              q: query,
+              page: targetPage
             })
           }
         />

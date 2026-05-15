@@ -55,15 +55,16 @@ export type ChatSearchSuggestionInput = {
 
 export type ChatLogResult = {
   entries: ChatLogEntry[];
-  totalRows: number;
-  totalPages: number;
+  totalRows: number | null;
+  totalPages: number | null;
   page: number;
   pageSize: number;
+  hasNextPage: boolean;
   dateRange: ChatDateRange | null;
 };
 
-type CountRow = RowDataPacket & {
-  totalRows: number;
+type ChatPageIdRow = RowDataPacket & {
+  id: number;
 };
 
 type ChatRow = RowDataPacket & {
@@ -348,6 +349,15 @@ export async function searchChatSuggestions(
   return suggestions;
 }
 
+function chatOrderBy(sort: ChatSort, order: ChatOrder): string {
+  const orderSql = order.toUpperCase();
+  if (sort === "date") {
+    return `cl.logDate ${orderSql}, cl.ID ${orderSql}`;
+  }
+
+  return `${SORT_SQL[sort]} ${orderSql}, cl.logDate DESC, cl.ID DESC`;
+}
+
 export async function getServerChatLog(
   input: ChatQueryInput
 ): Promise<ChatLogResult> {
@@ -358,23 +368,23 @@ export async function getServerChatLog(
   const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   const query = normalizeQuery(input.query);
   const dateRange = resolveChatDateRange(query);
-  const sortExpression = SORT_SQL[sort];
-  const orderSql = order.toUpperCase();
   const scope = buildServerScopeCondition("cl.ServerID", input);
+  const offset = (page - 1) * pageSize;
+  const orderBySql = chatOrderBy(sort, order);
 
-  const countParams: Array<string | number> = [input.gameId, ...scope.params];
-  let countSql = `
-    SELECT COUNT(*) AS totalRows
+  const pageParams: Array<string | number> = [input.gameId, ...scope.params];
+  let pageSql = `
+    SELECT cl.ID AS id
     FROM tbl_chatlog cl
     INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
     WHERE ${scope.sql}
   `;
 
   if (dateRange) {
-    countSql += " AND cl.logDate BETWEEN ? AND ? ";
-    countParams.push(dateRange.low, dateRange.high);
+    pageSql += " AND cl.logDate BETWEEN ? AND ? ";
+    pageParams.push(dateRange.low, dateRange.high);
   } else if (query) {
-    countSql += `
+    pageSql += `
       AND (
         cl.logSoldierName LIKE ?
         OR cl.logMessage LIKE ?
@@ -382,58 +392,61 @@ export async function getServerChatLog(
       )
     `;
     const pattern = `%${query}%`;
-    countParams.push(pattern, pattern, pattern);
+    pageParams.push(pattern, pattern, pattern);
   }
 
-  const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
-  const totalRows = Number(countRows[0]?.totalRows ?? 0);
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const boundedPage = Math.min(page, totalPages);
-  const offset = (boundedPage - 1) * pageSize;
-
-  const adkatsAvailable = await hasTable("adkats_bans");
-  const logParams: Array<string | number> = [input.gameId, ...scope.params];
-  let logSql = `
-    SELECT
-      cl.ID AS id,
-      cl.ServerID AS serverId,
-      ts.ServerName AS serverName,
-      cl.logDate AS logDate,
-      cl.logSoldierName AS soldierName,
-      tpd.CountryCode AS countryCode,
-      TRIM(cl.logMessage) AS message,
-      cl.logSubset AS subset,
-      cl.logPlayerID AS playerId
-      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-    FROM tbl_chatlog cl
-    LEFT JOIN tbl_server ts ON ts.ServerID = cl.ServerID
-    INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
-    ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = cl.logPlayerID" : ""}
-    WHERE ${scope.sql}
-  `;
-
-  if (dateRange) {
-    logSql += " AND cl.logDate BETWEEN ? AND ? ";
-    logParams.push(dateRange.low, dateRange.high);
-  } else if (query) {
-    logSql += `
-      AND (
-        cl.logSoldierName LIKE ?
-        OR cl.logMessage LIKE ?
-        OR cl.logDate LIKE ?
-      )
-    `;
-    const pattern = `%${query}%`;
-    logParams.push(pattern, pattern, pattern);
-  }
-
-  logSql += `
-    ORDER BY ${sortExpression} ${orderSql}, cl.logDate DESC
+  pageSql += `
+    ORDER BY ${orderBySql}
     LIMIT ? OFFSET ?
   `;
-  logParams.push(pageSize, offset);
+  pageParams.push(pageSize + 1, offset);
 
-  const [rows] = await pool.query<ChatRow[]>(logSql, logParams);
+  const [pageRows] = await pool.query<ChatPageIdRow[]>(pageSql, pageParams);
+  const hasNextPage = pageRows.length > pageSize;
+  const pageIds = pageRows.slice(0, pageSize).map((row) => Number(row.id));
+
+  if (pageIds.length === 0) {
+    return {
+      entries: [],
+      totalRows: null,
+      totalPages: null,
+      page,
+      pageSize,
+      hasNextPage: false,
+      dateRange
+    };
+  }
+
+  const adkatsAvailable = await hasTable("adkats_bans");
+  const idPlaceholders = pageIds.map(() => "?").join(", ");
+  const orderedIdPlaceholders = pageIds.map(() => "?").join(", ");
+  const logParams: Array<string | number> = [
+    input.gameId,
+    ...pageIds,
+    ...pageIds
+  ];
+  const [rows] = await pool.query<ChatRow[]>(
+    `
+      SELECT
+        cl.ID AS id,
+        cl.ServerID AS serverId,
+        ts.ServerName AS serverName,
+        cl.logDate AS logDate,
+        cl.logSoldierName AS soldierName,
+        tpd.CountryCode AS countryCode,
+        TRIM(cl.logMessage) AS message,
+        cl.logSubset AS subset,
+        cl.logPlayerID AS playerId
+      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
+      FROM tbl_chatlog cl
+      LEFT JOIN tbl_server ts ON ts.ServerID = cl.ServerID
+      INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = cl.logPlayerID" : ""}
+      WHERE cl.ID IN (${idPlaceholders})
+      ORDER BY FIELD(cl.ID, ${orderedIdPlaceholders})
+    `,
+    logParams
+  );
 
   return {
     entries: rows.map((row) => ({
@@ -453,10 +466,11 @@ export async function getServerChatLog(
             ? "expired"
             : null
     })),
-    totalRows,
-    totalPages,
-    page: boundedPage,
+    totalRows: null,
+    totalPages: null,
+    page,
     pageSize,
+    hasNextPage,
     dateRange
   };
 }

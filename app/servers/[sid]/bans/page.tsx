@@ -8,8 +8,8 @@ import { getLegacyServerContext } from "@/src/server/repositories/server-reposit
 import { getModerationPolicy } from "@/src/server/repositories/moderation-repository";
 import {
   getBannedPlayers,
-  parseBanOrder,
   parseBanPage,
+  parseBanOrder,
   parseBanSort,
   type BanOrder,
   type BanSort
@@ -41,12 +41,14 @@ function buildBansHref(
   serverId: number,
   sort: BanSort,
   order: BanOrder,
-  page: number
+  page: number = 1
 ): string {
   const params = new URLSearchParams();
   params.set("sort", sort);
   params.set("order", order);
-  params.set("page", String(page));
+  if (page > 1) {
+    params.set("page", String(page));
+  }
   return `/servers/${serverId}/bans?${params.toString()}`;
 }
 
@@ -107,8 +109,7 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
                       const href = buildBansHref(
                         server.serverId,
                         sortKey,
-                        nextOrder(sort, sortKey, order),
-                        1
+                        nextOrder(sort, sortKey, order)
                       );
                       const isActive = sort === sortKey;
 
@@ -167,6 +168,7 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
               page={result.page}
               totalPages={result.totalPages}
               totalLabel={`${result.totalRows} bans`}
+              hasNextPage={result.hasNextPage}
               getPageHref={(targetPage) =>
                 buildBansHref(server.serverId, sort, order, targetPage)
               }

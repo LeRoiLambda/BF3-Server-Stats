@@ -5,8 +5,8 @@ import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
 import {
   getSuspiciousPlayers,
-  parseSuspiciousOrder,
   parseSuspiciousPage,
+  parseSuspiciousOrder,
   parseSuspiciousSort,
   type SuspiciousSort
 } from "@/src/server/repositories/suspicious-repository";
@@ -68,8 +68,7 @@ export default async function AllServersSuspiciousPage({
                       sortKey,
                       order,
                       sortKey === "soldierName" ? "asc" : "desc"
-                    ),
-                    page: 1
+                    )
                   });
                   const isActive = sort === sortKey;
 
@@ -92,7 +91,9 @@ export default async function AllServersSuspiciousPage({
               ) : (
                 result.players.map((player, index) => (
                   <tr key={player.playerId} className={ui.tableRow}>
-                    <td className={ui.td}>{(result.page - 1) * result.pageSize + index + 1}</td>
+                    <td className={ui.td}>
+                      {(result.page - 1) * result.pageSize + index + 1}
+                    </td>
                     <td className={ui.td}>
                       <PlayerLink
                         playerId={player.playerId}
@@ -116,6 +117,7 @@ export default async function AllServersSuspiciousPage({
           page={result.page}
           totalPages={result.totalPages}
           totalLabel={`${result.totalRows} players`}
+          hasNextPage={result.hasNextPage}
           getPageHref={(targetPage) =>
             allServersHref("suspicious", {
               sort,
