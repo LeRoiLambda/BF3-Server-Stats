@@ -22,11 +22,11 @@ export const ui = {
   tableRow: "odd:bg-slate-950/35 even:bg-slate-900/25",
   emptyCell: "border-b border-slate-800/70 px-3 py-4 text-slate-400",
   input:
-    "w-full rounded-sm border border-slate-600 bg-slate-950/85 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none",
+    "h-9 w-full rounded-sm border border-slate-600 bg-slate-950/85 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-slate-400 focus:outline-none",
   buttonPrimary:
-    "rounded-sm border border-teal-400/55 bg-teal-900/35 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 hover:bg-teal-800/40",
+    "inline-flex h-9 items-center justify-center rounded-sm border border-teal-400/55 bg-teal-900/35 px-3 text-xs font-semibold uppercase tracking-wide text-slate-100 transition-colors hover:bg-teal-800/40",
   buttonGhost:
-    "rounded-sm border border-slate-600 bg-slate-900/85 px-3 py-2 text-xs font-medium text-slate-200 hover:border-slate-400",
+    "inline-flex h-9 items-center justify-center rounded-sm border border-slate-600 bg-slate-900/85 px-3 text-xs font-semibold uppercase tracking-wide text-slate-200 transition-colors hover:border-slate-400 hover:bg-slate-800/70 hover:text-slate-50",
   buttonLink:
     "rounded-sm border border-slate-600 bg-slate-900/80 px-2 py-1 text-xs text-slate-200 hover:border-slate-400",
   monoBlock:

@@ -138,7 +138,7 @@ export function StatsShell({
                     href={battlelogHref}
                     target="_blank"
                     rel="noreferrer"
-                    className={`${ui.buttonPrimary} inline-flex h-9 items-center text-nowrap`}
+                    className={`${ui.buttonPrimary} text-nowrap`}
                   >
                     Join Server
                   </a>
@@ -186,7 +186,7 @@ export function StatsShell({
             <div className="flex min-w-0 justify-end xl:shrink-0">
               <PlayerProfileSearchForm
                 serverId={currentServerId}
-                inputClassName={`${ui.input} h-8`}
+                inputClassName={ui.input}
                 inputWrapperClassName="flex-1 sm:w-64 sm:flex-none xl:w-52"
                 buttonClassName={`${ui.buttonPrimary} shrink-0`}
               />
