@@ -6,6 +6,10 @@ import {
   SuggestionMenu,
   type SuggestionMenuItem
 } from "@/components/search/suggestion-menu";
+import {
+  disciplineKindFromBanStatus,
+  playerDisciplineLabel
+} from "@/components/stats/player-discipline-badge";
 
 export type PlayerAutocompleteSuggestion = {
   playerId: number;
@@ -53,7 +57,9 @@ function playerSuggestionDetail(suggestion: PlayerAutocompleteSuggestion): strin
   }
 
   if (suggestion.banStatus) {
-    parts.push(suggestion.banStatus === "active" ? "Banned" : "Expired ban");
+    parts.push(
+      playerDisciplineLabel(disciplineKindFromBanStatus(suggestion.banStatus))
+    );
   }
 
   return parts.length > 0 ? parts.join(" / ") : null;

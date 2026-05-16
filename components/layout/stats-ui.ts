@@ -66,16 +66,3 @@ export function sortableHeadingClass(active: boolean): string {
     active ? "text-slate-50" : "text-slate-200 hover:text-white"
   );
 }
-
-export function banTagClass(status: string | null): string {
-  if (!status) {
-    return "";
-  }
-
-  return clsx(
-    "ml-2 rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
-    status === "active"
-      ? "border border-rose-300/30 bg-rose-950/50 text-rose-200"
-      : "border border-amber-300/30 bg-amber-950/50 text-amber-200"
-  );
-}
