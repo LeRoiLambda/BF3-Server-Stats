@@ -121,6 +121,9 @@ function badgeLabel(status: HeaderStatus): string {
   return playerDisciplineLabel(status.kind, "full");
 }
 
+const profileChipClass =
+  "inline-flex min-h-7 items-center rounded-sm border border-slate-600/45 bg-slate-950/55 px-2.5 py-1 text-xs text-slate-200";
+
 export function PlayerProfileHeader({
   profile,
   moderation,
@@ -134,8 +137,8 @@ export function PlayerProfileHeader({
   return (
     <section className={panelClass(status.kind)}>
       <div className={headerTintClass(status.kind)}>
-        <div className="grid gap-4 md:grid-cols-[auto_1fr_auto] md:items-center">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-sm border border-slate-600/45 bg-slate-950/70">
+        <div className="grid grid-cols-[auto_1fr] gap-4 md:grid-cols-[auto_1fr_auto] md:items-start">
+          <div className="col-start-1 row-start-1 flex h-24 w-24 shrink-0 items-center justify-center rounded-sm border border-slate-600/45 bg-slate-950/70">
             <Image
               src={rankImagePath(profile.globalRank)}
               alt={
@@ -150,7 +153,7 @@ export function PlayerProfileHeader({
             />
           </div>
 
-          <div className="min-w-0">
+          <div className="col-span-2 min-w-0 md:col-span-1 md:col-start-2 md:row-start-1">
             <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
               Player
             </p>
@@ -158,7 +161,7 @@ export function PlayerProfileHeader({
               {profile.soldierName}
             </h2>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-sm border border-slate-600/45 bg-slate-950/55 px-2.5 py-1 text-xs text-slate-200">
+              <span className={`${profileChipClass} gap-2`}>
                 <Image
                   src={countryFlagImagePath(profile.countryCode)}
                   alt={formatCountryName(profile.countryCode)}
@@ -169,31 +172,32 @@ export function PlayerProfileHeader({
                 />
                 {formatCountryName(profile.countryCode)}
               </span>
-              <span className="rounded-sm border border-slate-600/45 bg-slate-950/55 px-2.5 py-1 text-xs text-slate-200">
+              <span className={profileChipClass}>
                 BF3 rank {profile.globalRank ?? "Unknown"}
               </span>
               <span
                 className={playerDisciplineBadgeClass(
                   status.kind,
-                  "full"
+                  "full",
+                  "min-h-7"
                 )}
               >
                 {badgeLabel(status)}
               </span>
               {moderation.available && moderation.muteStatus.active ? (
-                <span className="inline-flex w-fit items-center rounded-sm border border-sky-300/40 bg-sky-950/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-100">
+                <span className="inline-flex min-h-7 w-fit items-center rounded-sm border border-sky-300/40 bg-sky-950/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-100">
                   Chat muted
                 </span>
               ) : null}
             </div>
           </div>
 
-          <div className="flex items-start md:justify-end">
+          <div className="col-start-2 row-start-1 flex items-start justify-end md:col-start-3">
             <a
               href={battlelogHref}
               target="_blank"
               rel="noreferrer"
-              className={`${ui.buttonGhost} inline-flex h-9 items-center justify-center text-nowrap`}
+              className={`${ui.buttonGhost} text-nowrap`}
             >
               Battlelog
             </a>
