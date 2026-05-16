@@ -11,7 +11,7 @@ import {
   mapImagePath
 } from "@/src/server/domain/bf3-reference";
 import {
-  getAllServersLeaderboard
+  getAllServersWeeklyLeaderboard
 } from "@/src/server/repositories/player-stats-repository";
 import { getAllServersPageScope } from "@/src/server/routing/server-pages";
 
@@ -27,14 +27,10 @@ function occupancyPercent(usedSlots: number, maxSlots: number): number {
 
 export default async function AllServersHomePage() {
   const scope = await getAllServersPageScope("home");
-  const topPlayers = await getAllServersLeaderboard({
+  const weeklyTopPlayers = await getAllServersWeeklyLeaderboard({
     serverIds: scope.serverIds,
     gameId: scope.gameId,
-    sort: "score",
-    order: "desc",
-    page: 1,
-    pageSize: 20,
-    search: null
+    limit: 20
   });
   const onlineServers = scope.context.servers.filter(
     (server) => server.connectionState === "on"
@@ -139,7 +135,12 @@ export default async function AllServersHomePage() {
       </section>
 
       <section className={`mt-6 ${ui.panel}`}>
-        <h2 className={`mb-3 ${ui.sectionTitle}`}>Top Players Across Servers</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className={ui.sectionTitle}>Top 20 This Week</h2>
+          <Link href="/servers/leaders?view=weekly" className={ui.buttonLink}>
+            Full Leaders Page
+          </Link>
+        </div>
         <div className={ui.tableShell}>
           <table className={ui.table}>
             <thead className={ui.tableHead}>
@@ -153,23 +154,37 @@ export default async function AllServersHomePage() {
               </tr>
             </thead>
             <tbody>
-              {topPlayers.players.map((player, index) => (
-                <tr key={player.playerId} className={ui.tableRow}>
-                  <td className={ui.td}>{index + 1}</td>
-                  <td className={ui.td}>
-                    <PlayerLink
-                      playerId={player.playerId}
-                      soldierName={player.soldierName}
-                      countryCode={player.countryCode}
-                    />
-                    <PlayerDisciplineBadge status={player.banStatus} />
+              {!weeklyTopPlayers.available ? (
+                <tr className={ui.tableRow}>
+                  <td className={ui.emptyCell} colSpan={6}>
+                    Weekly ranking is unavailable because session history is not present.
                   </td>
-                  <td className={ui.td}>{player.score}</td>
-                  <td className={ui.td}>{player.kills}</td>
-                  <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                  <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
                 </tr>
-              ))}
+              ) : weeklyTopPlayers.players.length === 0 ? (
+                <tr className={ui.tableRow}>
+                  <td className={ui.emptyCell} colSpan={6}>
+                    No session stats found this week.
+                  </td>
+                </tr>
+              ) : (
+                weeklyTopPlayers.players.map((player, index) => (
+                  <tr key={player.playerId} className={ui.tableRow}>
+                    <td className={ui.td}>{index + 1}</td>
+                    <td className={ui.td}>
+                      <PlayerLink
+                        playerId={player.playerId}
+                        soldierName={player.soldierName}
+                        countryCode={player.countryCode}
+                      />
+                      <PlayerDisciplineBadge status={player.banStatus} />
+                    </td>
+                    <td className={ui.td}>{player.score}</td>
+                    <td className={ui.td}>{player.kills}</td>
+                    <td className={ui.td}>{player.kdr.toFixed(2)}</td>
+                    <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
