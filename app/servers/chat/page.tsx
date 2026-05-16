@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChatAutoRefresh } from "@/components/chat/chat-auto-refresh";
 import { ChatSearchForm } from "@/components/chat/chat-search-form";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { banTagClass, sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
 import { SubsetBadge } from "@/components/stats/subset-badge";
@@ -131,9 +132,7 @@ export default async function AllServersChatPage({
                         soldierName={entry.soldierName}
                         countryCode={entry.countryCode}
                       />
-                      {entry.banStatus ? (
-                        <span className={banTagClass(entry.banStatus)}>{entry.banStatus}</span>
-                      ) : null}
+                      <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
                     </td>
                     <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
                       {entry.serverName ?? `Server #${entry.serverId}`}

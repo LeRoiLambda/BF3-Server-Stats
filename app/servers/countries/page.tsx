@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { banTagClass, switchButtonClass, ui } from "@/components/layout/stats-ui";
+import { switchButtonClass, ui } from "@/components/layout/stats-ui";
 import { CountryFlag } from "@/components/stats/country-flag";
+import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { PlayerLink } from "@/components/stats/player-link";
 import {
   formatCountryName,
@@ -115,9 +116,7 @@ export default async function AllServersCountriesPage({
                             soldierName={player.soldierName}
                             countryCode={player.countryCode}
                           />
-                          {player.banStatus ? (
-                            <span className={banTagClass(player.banStatus)}>{player.banStatus}</span>
-                          ) : null}
+                          <PlayerDisciplineBadge status={player.banStatus} />
                         </td>
                         <td className={ui.td}>{player.score}</td>
                         <td className={ui.td}>{player.kills}</td>

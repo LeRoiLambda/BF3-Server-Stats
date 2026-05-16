@@ -3,24 +3,12 @@ import { ui } from "@/components/layout/stats-ui";
 import type {
   ModerationAction,
   ModerationSeverity,
-  ModerationStatusKind,
   PlayerModerationSummary
 } from "@/src/server/repositories/moderation-repository";
 
 type PlayerModerationSectionProps = {
   summary: PlayerModerationSummary;
 };
-
-function statusClass(kind: ModerationStatusKind): string {
-  return clsx(
-    "inline-flex w-fit rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide",
-    kind === "activeBan"
-      ? "border-rose-300/40 bg-rose-950/55 text-rose-100"
-      : kind === "expiredBan"
-        ? "border-amber-300/35 bg-amber-950/45 text-amber-100"
-        : "border-emerald-300/25 bg-emerald-950/25 text-emerald-100"
-  );
-}
 
 function compactDate(value: string | null): string {
   return value ?? "Unknown date";
@@ -89,32 +77,15 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
 
   return (
     <section className="stats-panel mt-6 min-w-0 rounded-sm p-4">
-      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className={ui.sectionTitle}>Moderation</h2>
-        {summary.available ? (
-          <span className={statusClass(summary.currentStatus.kind)}>
-            {summary.currentStatus.label}
-          </span>
-        ) : null}
+      <div className="mb-3">
+        <h2 className={ui.sectionTitle}>Moderation Details</h2>
       </div>
 
       {!summary.available ? (
         <p className="text-sm text-slate-300">Unavailable.</p>
       ) : (
         <>
-          <div className="grid overflow-hidden rounded-sm border border-slate-700/60 bg-slate-950/45 text-sm md:grid-cols-4">
-            <div className="border-b border-slate-700/60 p-3 md:border-b-0 md:border-r">
-              <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Status</p>
-              <p className="mt-2 font-semibold text-slate-100">
-                {summary.currentStatus.label}
-              </p>
-              {summary.currentStatus.endsAt ? (
-                <p className="mt-1 text-xs text-slate-400">
-                  {summary.currentStatus.kind === "expiredBan" ? "Ended" : "Ends"}{" "}
-                  {summary.currentStatus.endsAt}
-                </p>
-              ) : null}
-            </div>
+          <div className="grid overflow-hidden rounded-sm border border-slate-700/60 bg-slate-950/45 text-sm md:grid-cols-3">
             <div className="border-b border-slate-700/60 p-3 md:border-b-0 md:border-r">
               <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Chat Mute</p>
               <p className="mt-2 font-semibold text-slate-100">
@@ -122,7 +93,8 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
               </p>
               {summary.muteStatus.active ? (
                 <p className="mt-1 text-xs text-slate-400">
-                  {summary.muteStatus.durationLabel} - until {summary.muteStatus.endsAt}
+                  {summary.muteStatus.durationLabel ?? "Active"}
+                  {summary.muteStatus.endsAt ? ` - until ${summary.muteStatus.endsAt}` : ""}
                 </p>
               ) : null}
             </div>
@@ -156,17 +128,6 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
               ) : null}
             </div>
           </div>
-
-          {summary.currentStatus.detail ? (
-                <div className="mt-3 rounded-sm border border-slate-700/45 bg-slate-950/35 px-3 py-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Latest Ban Message
-                  </p>
-                  <p className="mt-1 text-sm leading-5 text-slate-300">
-                    {summary.currentStatus.detail}
-                  </p>
-                </div>
-          ) : null}
 
           <div className="mt-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">

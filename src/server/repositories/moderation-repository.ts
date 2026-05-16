@@ -4,6 +4,7 @@ import { hasTable } from "@/src/server/db/schema";
 import { toDateTimeString } from "@/src/server/utils/dates";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
+export type ModerationBanDuration = "permanent" | "temporary" | null;
 
 export type ModerationStatus = {
   kind: ModerationStatusKind;
@@ -11,6 +12,7 @@ export type ModerationStatus = {
   detail: string | null;
   startedAt: string | null;
   endsAt: string | null;
+  banDuration: ModerationBanDuration;
 };
 
 export type ModerationMuteStatus = {
@@ -100,6 +102,9 @@ type BanRow = RowDataPacket & {
   banNotes: string | null;
   banStartTime: string | Date | null;
   banEndTime: string | Date | null;
+  commandType?: number | null;
+  commandAction?: number | null;
+  commandText?: string | null;
   recordMessage?: string | null;
 };
 
@@ -143,7 +148,8 @@ const DEFAULT_STATUS: ModerationStatus = {
   label: "No active punishment",
   detail: null,
   startedAt: null,
-  endsAt: null
+  endsAt: null,
+  banDuration: null
 };
 
 const DEFAULT_MUTE_STATUS: ModerationMuteStatus = {
@@ -197,6 +203,10 @@ const MODERATION_COMMAND_KEY_PATTERNS = [
   "%punish%",
   "%forgive%"
 ];
+const PERMANENT_BAN_COMMAND_TEXTS = new Set(["ban", "fban"]);
+const TEMPORARY_BAN_COMMAND_TEXTS = new Set(["tban"]);
+const PERMANENT_BAN_COMMAND_IDS = new Set([8, 50]);
+const TEMPORARY_BAN_COMMAND_IDS = new Set([7]);
 
 function toFiniteNumber(value: unknown): number {
   const numberValue = Number(value ?? 0);
@@ -210,6 +220,40 @@ function cleanDateTime(value: unknown): string | null {
   }
 
   return formatted;
+}
+
+function banDurationFromRow(row: BanRow): ModerationBanDuration {
+  const commandText = row.commandText?.trim().toLowerCase();
+  if (commandText && PERMANENT_BAN_COMMAND_TEXTS.has(commandText)) {
+    return "permanent";
+  }
+
+  if (commandText && TEMPORARY_BAN_COMMAND_TEXTS.has(commandText)) {
+    return "temporary";
+  }
+
+  const commandId = Number(row.commandAction ?? row.commandType ?? 0);
+  if (PERMANENT_BAN_COMMAND_IDS.has(commandId)) {
+    return "permanent";
+  }
+
+  if (TEMPORARY_BAN_COMMAND_IDS.has(commandId)) {
+    return "temporary";
+  }
+
+  return null;
+}
+
+function activeBanLabel(duration: ModerationBanDuration): string {
+  if (duration === "permanent") {
+    return "Permanent ban";
+  }
+
+  if (duration === "temporary") {
+    return "Temporary ban";
+  }
+
+  return "Active ban";
 }
 
 function toDate(value: string | Date | null | undefined): Date | null {
@@ -276,6 +320,21 @@ async function getCurrentStatus(
     ? "LEFT JOIN adkats_records_main abr ON abr.record_id = adk.latest_record_id"
     : "";
   const recordMessageField = availability.records ? ", abr.record_message AS recordMessage" : "";
+  const recordCommandFields = availability.records
+    ? `,
+        abr.command_type AS commandType,
+        abr.command_action AS commandAction`
+    : "";
+  const commandJoins =
+    availability.records && availability.commands
+      ? `
+        LEFT JOIN adkats_commands type_cmd ON type_cmd.command_id = abr.command_type
+        LEFT JOIN adkats_commands action_cmd ON action_cmd.command_id = abr.command_action`
+      : "";
+  const commandTextField =
+    availability.records && availability.commands
+      ? ", COALESCE(LOWER(action_cmd.command_text), LOWER(type_cmd.command_text)) AS commandText"
+      : "";
   const [rows] = await pool.query<BanRow[]>(
     `
       SELECT
@@ -284,8 +343,11 @@ async function getCurrentStatus(
         adk.ban_startTime AS banStartTime,
         adk.ban_endTime AS banEndTime
         ${recordMessageField}
+        ${recordCommandFields}
+        ${commandTextField}
       FROM adkats_bans adk
       ${recordsJoin}
+      ${commandJoins}
       WHERE adk.player_id = ?
       ORDER BY
         CASE
@@ -306,13 +368,15 @@ async function getCurrentStatus(
   }
 
   const detail = row.recordMessage || row.banNotes || null;
+  const banDuration = banDurationFromRow(row);
   if (row.banStatus === "Active") {
     return {
       kind: "activeBan",
-      label: "Active ban",
+      label: activeBanLabel(banDuration),
       detail,
       startedAt: cleanDateTime(row.banStartTime),
-      endsAt: cleanDateTime(row.banEndTime)
+      endsAt: cleanDateTime(row.banEndTime),
+      banDuration
     };
   }
 
@@ -322,7 +386,8 @@ async function getCurrentStatus(
       label: "Expired ban",
       detail,
       startedAt: cleanDateTime(row.banStartTime),
-      endsAt: cleanDateTime(row.banEndTime)
+      endsAt: cleanDateTime(row.banEndTime),
+      banDuration
     };
   }
 

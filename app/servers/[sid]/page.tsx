@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { SegmentedNav } from "@/components/layout/segmented-nav";
 import { RouteAutoRefresh } from "@/components/stats/route-auto-refresh";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { banTagClass, sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { PlayerLink } from "@/components/stats/player-link";
 import {
   formatGamemodeName,
@@ -360,11 +361,10 @@ export default async function ServerHomePage({
                                     countryCode={player.countryCode}
                                     serverId={server.serverId}
                                   />
-                                  {player.banStatus ? (
-                                    <span className={banTagClass(player.banStatus)}>
-                                      {player.banStatus}
-                                    </span>
-                                  ) : null}
+                                  <PlayerDisciplineBadge
+                                    status={player.banStatus}
+                                    density="compact"
+                                  />
                                 </td>
                                 <td className={ui.td}>{player.score}</td>
                                 <td className={ui.td}>{player.kills}</td>
@@ -448,11 +448,7 @@ export default async function ServerHomePage({
                           countryCode={player.countryCode}
                           serverId={server.serverId}
                         />
-                        {player.banStatus ? (
-                          <span className={banTagClass(player.banStatus)}>
-                            {player.banStatus}
-                          </span>
-                        ) : null}
+                        <PlayerDisciplineBadge status={player.banStatus} />
                       </td>
                       <td className={ui.td}>{player.score}</td>
                       <td className={ui.td}>{player.kills}</td>

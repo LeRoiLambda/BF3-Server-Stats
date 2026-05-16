@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { banTagClass, sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
 import {
@@ -100,9 +101,7 @@ export default async function AllServersSuspiciousPage({
                         soldierName={player.soldierName}
                         countryCode={player.countryCode}
                       />
-                      {player.banStatus ? (
-                        <span className={banTagClass(player.banStatus)}>{player.banStatus}</span>
-                      ) : null}
+                      <PlayerDisciplineBadge status={player.banStatus} />
                     </td>
                     <td className={ui.td}>{player.kdr.toFixed(2)}</td>
                     <td className={ui.td}>{player.hsr.toFixed(2)}%</td>

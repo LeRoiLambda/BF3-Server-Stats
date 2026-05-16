@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
@@ -8,13 +7,11 @@ import {
   type PlayerWeaponStat
 } from "@/components/stats/player-profile-sections";
 import { PlayerModerationSection } from "@/components/stats/player-moderation-section";
+import { PlayerProfileHeader } from "@/components/stats/player-profile-header";
 import {
-  countryFlagImagePath,
-  formatCountryName,
   formatWeaponCategory,
   formatWeaponName,
   normalizeWeaponCategory,
-  rankImagePath,
   weaponImagePath
 } from "@/src/server/domain/bf3-reference";
 import {
@@ -195,82 +192,39 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
   return (
     <StatsShell
-      title={`Player: ${profile.soldierName}`}
+      title="Player Profile"
       servers={context.servers}
       currentServerId={serverScope?.serverId ?? null}
       activeSection="home"
       scopeOptions={playerScopeOptions}
       scopeValue={playerScopeHref}
-      titleAction={
-        <a
-          href={battlelogHref}
-          target="_blank"
-          rel="noreferrer"
-          className={`${ui.buttonGhost} inline-flex h-9 items-center justify-center text-nowrap`}
-        >
-          Battlelog
-        </a>
-      }
     >
-      <section className={`${ui.panel} grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center`}>
-        <div className="flex items-center gap-4">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-sm border border-slate-600/45 bg-slate-950/70">
-            <Image
-              src={rankImagePath(profile.globalRank)}
-              alt={
-                profile.globalRank === null
-                  ? "Unknown BF3 rank"
-                  : `BF3 rank ${profile.globalRank}`
-              }
-              width={88}
-              height={88}
-              className="h-20 w-20 object-contain"
-              priority
-            />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.15em] text-slate-400">
-              BF3 Rank
-            </p>
-            <p className="mt-1 text-xl font-semibold text-slate-100">
-              {profile.globalRank ?? "Unknown"}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid overflow-hidden rounded-sm border border-slate-700/60 bg-slate-950/45 text-sm sm:grid-cols-3">
-          <div className="border-b border-slate-700/60 p-3 sm:border-b-0 sm:border-r">
-            <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Score Rank</p>
-            <p className="mt-2 font-semibold text-slate-100">
-              {formatRankPosition(rankPositions.scoreRank, rankPositions.totalPlayers)}
-            </p>
-          </div>
-          <div className="border-b border-slate-700/60 p-3 sm:border-b-0 sm:border-r">
-            <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Kills Rank</p>
-            <p className="mt-2 font-semibold text-slate-100">
-              {formatRankPosition(rankPositions.killsRank, rankPositions.totalPlayers)}
-            </p>
-          </div>
-          <div className="p-3">
-            <p className="text-xs uppercase tracking-[0.12em] text-slate-400">KDR Rank</p>
-            <p className="mt-2 font-semibold text-slate-100">
-              {formatRankPosition(rankPositions.kdrRank, rankPositions.totalPlayers)}
-            </p>
-          </div>
-        </div>
-      </section>
+      <PlayerProfileHeader
+        profile={profile}
+        moderation={moderation}
+        battlelogHref={battlelogHref}
+      />
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <article className={ui.card}>
           <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Score</p>
           <p className="mt-2 text-lg font-semibold text-slate-100">{profile.score}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Rank {formatRankPosition(rankPositions.scoreRank, rankPositions.totalPlayers)}
+          </p>
         </article>
         <article className={ui.card}>
           <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Kills / Deaths</p>
           <p className="mt-2 text-lg font-semibold text-slate-100">
             {profile.kills} / {profile.deaths}
           </p>
-          <p className="mt-1 text-xs text-slate-400">KDR {profile.kdr.toFixed(2)}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            KDR {profile.kdr.toFixed(2)} - rank{" "}
+            {formatRankPosition(rankPositions.kdrRank, rankPositions.totalPlayers)}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Kills rank {formatRankPosition(rankPositions.killsRank, rankPositions.totalPlayers)}
+          </p>
         </article>
         <article className={ui.card}>
           <p className="text-xs uppercase tracking-[0.12em] text-slate-400">HSR / Headshots</p>
@@ -290,27 +244,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
 
       <section className={`mt-6 ${ui.panel}`}>
         <h2 className={ui.sectionTitle}>
-          Profile Overview
+          Activity Overview
         </h2>
         <div className="mt-3 grid gap-3 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-3">
-          <p>
-            <span className="text-slate-400">Country:</span>{" "}
-            <span className="inline-flex items-center gap-2">
-              <Image
-                src={countryFlagImagePath(profile.countryCode)}
-                alt={formatCountryName(profile.countryCode)}
-                title={formatCountryName(profile.countryCode)}
-                width={18}
-                height={12}
-                className="h-3 w-[18px] rounded-[2px] border border-slate-700/80 object-cover"
-              />
-              {formatCountryName(profile.countryCode)}
-            </span>
-          </p>
-          <p>
-            <span className="text-slate-400">Global Rank:</span>{" "}
-            {profile.globalRank ?? "Unknown"}
-          </p>
           <p>
             <span className="text-slate-400">Rounds:</span> {profile.rounds}
           </p>
