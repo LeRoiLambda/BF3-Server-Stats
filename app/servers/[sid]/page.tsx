@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { SegmentedNav } from "@/components/layout/segmented-nav";
 import { RouteAutoRefresh } from "@/components/stats/route-auto-refresh";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
@@ -13,7 +12,6 @@ import {
 } from "@/src/server/domain/bf3-reference";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
-  getServerLeaderboard,
   getWeeklyServerLeaderboard,
   listCurrentPlayersByServer,
   parseCurrentPlayerOrder,
@@ -77,14 +75,10 @@ function nextCurrentPlayerOrder(
 
 function buildScoreboardHref(
   serverId: number,
-  leadersView: "overall" | "weekly",
   sort: CurrentPlayerSort,
   order: CurrentPlayerOrder
 ): string {
   const params = new URLSearchParams();
-  if (leadersView === "weekly") {
-    params.set("leaders", "weekly");
-  }
   params.set("scoreboardSort", sort);
   params.set("scoreboardOrder", order);
 
@@ -134,7 +128,6 @@ export default async function ServerHomePage({
     notFound();
   }
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const leadersView = firstValue(resolvedSearchParams.leaders) === "weekly" ? "weekly" : "overall";
   const scoreboardSort = parseCurrentPlayerSort(
     firstValue(resolvedSearchParams.scoreboardSort)
   );
@@ -148,18 +141,9 @@ export default async function ServerHomePage({
     notFound();
   }
 
-  const [teamScores, topPlayers, weeklyTopPlayers, currentPlayers] =
+  const [teamScores, weeklyTopPlayers, currentPlayers] =
     await Promise.all([
       listTeamScores(server.serverId),
-      getServerLeaderboard({
-        serverId: server.serverId,
-        gameId: server.gameId,
-        sort: "score",
-        order: "desc",
-        page: 1,
-        pageSize: 20,
-        search: null
-      }),
       getWeeklyServerLeaderboard({
         serverId: server.serverId,
         gameId: server.gameId,
@@ -187,11 +171,7 @@ export default async function ServerHomePage({
     .map(({ teamId }) => teamScoresById.get(teamId))
     .filter((score) => score !== undefined)
     .sort((left, right) => right.score - left.score)[0];
-  const selectedTopPlayers = leadersView === "weekly" ? weeklyTopPlayers.players : topPlayers.players;
-  const fullLeadersHref =
-    leadersView === "weekly"
-      ? `/servers/${server.serverId}/leaders?view=weekly&scope=server`
-      : `/servers/${server.serverId}/leaders?scope=server`;
+  const fullLeadersHref = `/servers/${server.serverId}/leaders?view=weekly`;
   const currentMapImagePath = mapImagePath(server.mapName);
 
   return (
@@ -311,7 +291,6 @@ export default async function ServerHomePage({
                               (sortKey) => {
                                 const href = buildScoreboardHref(
                                   server.serverId,
-                                  leadersView,
                                   sortKey,
                                   nextCurrentPlayerOrder(
                                     scoreboardSort,
@@ -385,21 +364,7 @@ export default async function ServerHomePage({
 
         <article className={ui.panel}>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <SegmentedNav
-              label="Leaderboard view"
-              items={[
-                {
-                  href: `/servers/${server.serverId}`,
-                  label: "Top Players",
-                  selected: leadersView === "overall"
-                },
-                {
-                  href: `/servers/${server.serverId}?leaders=weekly`,
-                  label: "Top 20 This Week",
-                  selected: leadersView === "weekly"
-                }
-              ]}
-            />
+            <h2 className={ui.sectionTitle}>Top 20 This Week</h2>
             <a
               href={fullLeadersHref}
               className={ui.buttonLink}
@@ -420,22 +385,20 @@ export default async function ServerHomePage({
                 </tr>
               </thead>
               <tbody>
-                {leadersView === "weekly" && !weeklyTopPlayers.available ? (
+                {!weeklyTopPlayers.available ? (
                   <tr className={ui.tableRow}>
                     <td className={ui.emptyCell} colSpan={6}>
                       Weekly ranking is unavailable because session history is not present.
                     </td>
                   </tr>
-                ) : selectedTopPlayers.length === 0 ? (
+                ) : weeklyTopPlayers.players.length === 0 ? (
                   <tr className={ui.tableRow}>
                     <td className={ui.emptyCell} colSpan={6}>
-                      {leadersView === "weekly"
-                        ? "No session stats found this week."
-                        : "No player stats found."}
+                      No session stats found this week.
                     </td>
                   </tr>
                 ) : (
-                  selectedTopPlayers.map((player, index) => (
+                  weeklyTopPlayers.players.map((player, index) => (
                     <tr
                       key={player.playerId}
                       className={ui.tableRow}
