@@ -3,7 +3,11 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
   getSuspiciousPlayers,
@@ -133,23 +137,52 @@ export default async function SuspiciousPage({
                 result.players.map((player, index) => (
                   <tr
                     key={player.playerId}
-                    className={ui.tableRow}
+                    className={playerTableRowClass(ui.tableRow)}
                   >
                     <td className={ui.td}>
-                      {(result.page - 1) * result.pageSize + index + 1}
+                      <PlayerTableCellLink
+                        playerId={player.playerId}
+                        serverId={server.serverId}
+                      >
+                        {(result.page - 1) * result.pageSize + index + 1}
+                      </PlayerTableCellLink>
                     </td>
                     <td className={ui.td}>
-                      <PlayerLink
+                      <PlayerTableCellLink
                         playerId={player.playerId}
-                        soldierName={player.soldierName}
-                        countryCode={player.countryCode}
                         serverId={server.serverId}
-                      />
-                      <PlayerDisciplineBadge status={player.banStatus} />
+                      >
+                        <PlayerIdentity
+                          soldierName={player.soldierName}
+                          countryCode={player.countryCode}
+                        />
+                        <PlayerDisciplineBadge status={player.banStatus} />
+                      </PlayerTableCellLink>
                     </td>
-                    <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                    <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
-                    <td className={ui.td}>{player.rounds}</td>
+                    <td className={ui.td}>
+                      <PlayerTableCellLink
+                        playerId={player.playerId}
+                        serverId={server.serverId}
+                      >
+                        {player.kdr.toFixed(2)}
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={ui.td}>
+                      <PlayerTableCellLink
+                        playerId={player.playerId}
+                        serverId={server.serverId}
+                      >
+                        {player.hsr.toFixed(2)}%
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={ui.td}>
+                      <PlayerTableCellLink
+                        playerId={player.playerId}
+                        serverId={server.serverId}
+                      >
+                        {player.rounds}
+                      </PlayerTableCellLink>
+                    </td>
                   </tr>
                 ))
               )}

@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { clsx } from "clsx";
 import { ui } from "@/components/layout/stats-ui";
-import { CountryFlag } from "@/components/stats/country-flag";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerHref,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import {
   toWeeklyLeaderboardPodiumRank,
   WeeklyLeaderboardMedal,
@@ -35,16 +39,11 @@ type WeeklyLeaderboardTableProps = Readonly<{
   serverId?: number | null;
 }>;
 
-function playerProfileHref(playerId: number, serverId?: number | null): string {
-  const query = serverId ? `?sid=${serverId}` : "";
-
-  return `/players/${playerId}${query}`;
-}
-
 const PODIUM_META: Record<
   WeeklyLeaderboardPodiumRank,
   {
     className: string;
+    interactiveClassName: string;
     labelClassName: string;
     medalClassName: string;
     metricClassName: string;
@@ -54,6 +53,8 @@ const PODIUM_META: Record<
   1: {
     className:
       "border-amber-300/75 bg-[linear-gradient(135deg,rgba(120,78,0,0.42),rgba(15,23,42,0.76)_56%,rgba(251,191,36,0.16))] shadow-[0_18px_36px_rgba(0,0,0,0.30),0_0_0_1px_rgba(251,191,36,0.14),inset_0_1px_0_rgba(251,191,36,0.24)]",
+    interactiveClassName:
+      "hover:border-amber-100 hover:brightness-[1.08] focus-visible:border-amber-100 focus-visible:ring-2 focus-visible:ring-amber-200/55",
     labelClassName: "text-amber-100",
     medalClassName: "h-14 w-12 sm:h-16 sm:w-14",
     metricClassName: "text-amber-50",
@@ -62,6 +63,8 @@ const PODIUM_META: Record<
   2: {
     className:
       "border-slate-200/60 bg-[linear-gradient(135deg,rgba(148,163,184,0.22),rgba(15,23,42,0.78)_58%,rgba(226,232,240,0.10))] shadow-[0_14px_28px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(226,232,240,0.20)]",
+    interactiveClassName:
+      "hover:border-slate-100 hover:brightness-[1.08] focus-visible:border-slate-100 focus-visible:ring-2 focus-visible:ring-slate-200/50",
     labelClassName: "text-slate-100",
     medalClassName: "h-12 w-10 sm:h-14 sm:w-12",
     metricClassName: "text-slate-50",
@@ -70,6 +73,8 @@ const PODIUM_META: Record<
   3: {
     className:
       "border-orange-300/60 bg-[linear-gradient(135deg,rgba(124,45,18,0.32),rgba(15,23,42,0.78)_58%,rgba(251,146,60,0.12))] shadow-[0_14px_28px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(251,146,60,0.18)]",
+    interactiveClassName:
+      "hover:border-orange-200 hover:brightness-[1.08] focus-visible:border-orange-200 focus-visible:ring-2 focus-visible:ring-orange-200/50",
     labelClassName: "text-orange-100",
     medalClassName: "h-12 w-10 sm:h-14 sm:w-12",
     metricClassName: "text-orange-50",
@@ -119,10 +124,11 @@ function WeeklyPodium({ players, serverId = null }: WeeklyPodiumProps) {
         return (
           <Link
             key={player.playerId}
-            href={playerProfileHref(player.playerId, serverId)}
+            href={playerHref(player.playerId, serverId)}
             className={clsx(
-              "relative min-w-0 overflow-hidden rounded-sm border p-4",
+              "relative min-w-0 overflow-hidden rounded-sm border p-4 transition-[border-color,box-shadow,filter] duration-150 ease-out focus:outline-none",
               meta.className,
+              meta.interactiveClassName,
               podiumPlacementClass(rank, players.length)
             )}
           >
@@ -162,10 +168,10 @@ function WeeklyPodium({ players, serverId = null }: WeeklyPodiumProps) {
                   rank === 1 ? "text-lg" : "text-base"
                 )}
               >
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <CountryFlag countryCode={player.countryCode} />
-                  <span className="truncate">{player.soldierName}</span>
-                </span>
+                <PlayerIdentity
+                  soldierName={player.soldierName}
+                  countryCode={player.countryCode}
+                />
               </div>
               <PlayerDisciplineBadge status={player.banStatus} density="compact" />
             </div>
@@ -223,23 +229,41 @@ function WeeklyLeaderboardTable({
         </thead>
         <tbody>
           {players.map((player, index) => (
-            <tr key={player.playerId} className={ui.tableRow}>
+            <tr key={player.playerId} className={playerTableRowClass(ui.tableRow)}>
               <td className={ui.td}>
-                <WeeklyLeaderboardRank rank={startRank + index} />
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                  <WeeklyLeaderboardRank rank={startRank + index} />
+                </PlayerTableCellLink>
               </td>
               <td className={ui.td}>
-                <PlayerLink
-                  playerId={player.playerId}
-                  soldierName={player.soldierName}
-                  countryCode={player.countryCode}
-                  serverId={serverId}
-                />
-                <PlayerDisciplineBadge status={player.banStatus} />
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                  <PlayerIdentity
+                    soldierName={player.soldierName}
+                    countryCode={player.countryCode}
+                  />
+                  <PlayerDisciplineBadge status={player.banStatus} />
+                </PlayerTableCellLink>
               </td>
-              <td className={ui.td}>{player.score}</td>
-              <td className={ui.td}>{player.kills}</td>
-              <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-              <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
+              <td className={ui.td}>
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                  {player.score}
+                </PlayerTableCellLink>
+              </td>
+              <td className={ui.td}>
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                  {player.kills}
+                </PlayerTableCellLink>
+              </td>
+              <td className={ui.td}>
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                  {player.kdr.toFixed(2)}
+                </PlayerTableCellLink>
+              </td>
+              <td className={ui.td}>
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                  {player.hsr.toFixed(2)}%
+                </PlayerTableCellLink>
+              </td>
             </tr>
           ))}
         </tbody>

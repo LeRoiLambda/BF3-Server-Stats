@@ -5,7 +5,11 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import { SubsetBadge } from "@/components/stats/subset-badge";
 import {
   getServerChatLog,
@@ -121,26 +125,41 @@ export default async function AllServersChatPage({
                 </tr>
               ) : (
                 result.entries.map((entry, index) => (
-                  <tr key={entry.id} className={ui.tableRow}>
+                  <tr key={entry.id} className={playerTableRowClass(ui.tableRow)}>
                     <td className={ui.td}>
-                      {(result.page - 1) * result.pageSize + index + 1}
+                      <PlayerTableCellLink playerId={entry.playerId}>
+                        {(result.page - 1) * result.pageSize + index + 1}
+                      </PlayerTableCellLink>
                     </td>
-                    <td className={`${ui.td} whitespace-nowrap`}>{entry.logDate}</td>
                     <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerLink
-                        playerId={entry.playerId}
-                        soldierName={entry.soldierName}
-                        countryCode={entry.countryCode}
-                      />
-                      <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
+                      <PlayerTableCellLink playerId={entry.playerId}>
+                        {entry.logDate}
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={`${ui.td} whitespace-nowrap`}>
+                      <PlayerTableCellLink playerId={entry.playerId}>
+                        <PlayerIdentity
+                          soldierName={entry.soldierName}
+                          countryCode={entry.countryCode}
+                        />
+                        <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
+                      </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                      {entry.serverName ?? `Server #${entry.serverId}`}
+                      <PlayerTableCellLink playerId={entry.playerId}>
+                        {entry.serverName ?? `Server #${entry.serverId}`}
+                      </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                      <SubsetBadge subset={entry.subset} />
+                      <PlayerTableCellLink playerId={entry.playerId}>
+                        <SubsetBadge subset={entry.subset} />
+                      </PlayerTableCellLink>
                     </td>
-                    <td className={`${ui.td} text-slate-300`}>{entry.message}</td>
+                    <td className={`${ui.td} text-slate-300`}>
+                      <PlayerTableCellLink playerId={entry.playerId}>
+                        {entry.message}
+                      </PlayerTableCellLink>
+                    </td>
                   </tr>
                 ))
               )}

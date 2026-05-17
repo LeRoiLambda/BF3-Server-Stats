@@ -3,7 +3,11 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { ModerationPolicySection } from "@/components/stats/moderation-policy-section";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import { getModerationPolicy } from "@/src/server/repositories/moderation-repository";
 import {
@@ -139,23 +143,50 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
                     result.players.map((player, index) => (
                       <tr
                         key={player.playerId}
-                        className={ui.tableRow}
+                        className={playerTableRowClass(ui.tableRow)}
                       >
                         <td className={ui.td}>
-                          {(result.page - 1) * result.pageSize + index + 1}
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {(result.page - 1) * result.pageSize + index + 1}
+                          </PlayerTableCellLink>
                         </td>
                         <td className={ui.td}>
-                          <PlayerLink
+                          <PlayerTableCellLink
                             playerId={player.playerId}
-                            soldierName={player.soldierName}
-                            countryCode={player.countryCode}
                             serverId={server.serverId}
-                          />
+                          >
+                            <PlayerIdentity
+                              soldierName={player.soldierName}
+                              countryCode={player.countryCode}
+                            />
+                          </PlayerTableCellLink>
                         </td>
-                        <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                        <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {player.kdr.toFixed(2)}
+                          </PlayerTableCellLink>
+                        </td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {player.hsr.toFixed(2)}%
+                          </PlayerTableCellLink>
+                        </td>
                         <td className={`${ui.td} text-slate-300`}>
-                          {player.reason ?? "No reason recorded"}
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {player.reason ?? "No reason recorded"}
+                          </PlayerTableCellLink>
                         </td>
                       </tr>
                     ))
