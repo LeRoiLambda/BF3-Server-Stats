@@ -261,7 +261,7 @@ export function PlayerProfileHeader({
                 {profile.soldierName}
               </h2>
               <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                Current weekly top 3 player for the selected scope.
+                On this week&apos;s podium.
               </p>
             </div>
 
