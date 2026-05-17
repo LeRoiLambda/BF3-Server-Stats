@@ -9,6 +9,10 @@ import {
 import { PlayerModerationSection } from "@/components/stats/player-moderation-section";
 import { PlayerProfileHeader } from "@/components/stats/player-profile-header";
 import {
+  toWeeklyLeaderboardPodiumRank,
+  type WeeklyLeaderboardPodiumRank
+} from "@/components/stats/weekly-leaderboard-rank";
+import {
   formatWeaponCategory,
   formatWeaponName,
   normalizeWeaponCategory,
@@ -22,6 +26,11 @@ import {
   listPlayerDogtagLosses,
   type PlayerWeapon
 } from "@/src/server/repositories/player-profile-repository";
+import {
+  getAllServersWeeklyLeaderboard,
+  getWeeklyServerLeaderboard,
+  type LeaderboardPlayer
+} from "@/src/server/repositories/player-stats-repository";
 import { getPlayerModerationSummary } from "@/src/server/repositories/moderation-repository";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
@@ -54,6 +63,31 @@ function formatRankPosition(rank: number | null, totalPlayers: number): string {
 
 function battlelogPlayerHref(soldierName: string): string {
   return `https://battlelog.battlefield.com/bf3/user/${encodeURIComponent(soldierName)}/`;
+}
+
+type WeeklyPodiumProfile = {
+  rank: WeeklyLeaderboardPodiumRank;
+  player: LeaderboardPlayer;
+};
+
+function findWeeklyPodiumProfile(
+  players: LeaderboardPlayer[],
+  playerId: number
+): WeeklyPodiumProfile | null {
+  const index = players.findIndex((player) => player.playerId === playerId);
+  if (index === -1) {
+    return null;
+  }
+
+  const rank = toWeeklyLeaderboardPodiumRank(index + 1);
+  if (rank === null) {
+    return null;
+  }
+
+  return {
+    rank,
+    player: players[index]
+  };
 }
 
 type WeaponCategoryGroup = {
@@ -109,7 +143,15 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       ? context.servers.find((server) => server.serverId === serverId) ?? null
       : null;
 
-  const [profile, rankPositions, weaponStats, dogtagLosses, dogtagCollections, moderation] =
+  const [
+    profile,
+    rankPositions,
+    weaponStats,
+    dogtagLosses,
+    dogtagCollections,
+    moderation,
+    weeklyTopPlayers
+  ] =
     await Promise.all([
       getPlayerProfileById({
         playerId,
@@ -142,7 +184,18 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         playerId,
         serverId: serverScope?.serverId ?? null,
         recentLimit: 5
-      })
+      }),
+      serverScope === null
+        ? getAllServersWeeklyLeaderboard({
+            serverIds: context.servers.map((server) => server.serverId),
+            gameId,
+            limit: 3
+          })
+        : getWeeklyServerLeaderboard({
+            serverId: serverScope.serverId,
+            gameId,
+            limit: 3
+          })
     ]);
 
   if (!profile) {
@@ -189,6 +242,9 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         ]
       : undefined;
   const battlelogHref = battlelogPlayerHref(profile.soldierName);
+  const weeklyPodium = weeklyTopPlayers.available
+    ? findWeeklyPodiumProfile(weeklyTopPlayers.players, playerId)
+    : null;
 
   return (
     <StatsShell
@@ -203,6 +259,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         profile={profile}
         moderation={moderation}
         battlelogHref={battlelogHref}
+        weeklyPodium={weeklyPodium}
       />
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
