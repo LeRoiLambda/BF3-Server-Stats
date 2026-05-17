@@ -3,7 +3,11 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { switchButtonClass, ui } from "@/components/layout/stats-ui";
 import { CountryFlag } from "@/components/stats/country-flag";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import {
   formatCountryName,
   normalizeCountryCode
@@ -173,21 +177,52 @@ export default async function CountriesPage({
                     snapshot.players.map((player, index) => (
                       <tr
                         key={player.playerId}
-                        className={ui.tableRow}
+                        className={playerTableRowClass(ui.tableRow)}
                       >
-                        <td className={ui.td}>{index + 1}</td>
                         <td className={ui.td}>
-                          <PlayerLink
+                          <PlayerTableCellLink
                             playerId={player.playerId}
-                            soldierName={player.soldierName}
-                            countryCode={player.countryCode}
                             serverId={server.serverId}
-                          />
-                          <PlayerDisciplineBadge status={player.banStatus} />
+                          >
+                            {index + 1}
+                          </PlayerTableCellLink>
                         </td>
-                        <td className={ui.td}>{player.score}</td>
-                        <td className={ui.td}>{player.kills}</td>
-                        <td className={ui.td}>{player.kdr.toFixed(2)}</td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            <PlayerIdentity
+                              soldierName={player.soldierName}
+                              countryCode={player.countryCode}
+                            />
+                            <PlayerDisciplineBadge status={player.banStatus} />
+                          </PlayerTableCellLink>
+                        </td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {player.score}
+                          </PlayerTableCellLink>
+                        </td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {player.kills}
+                          </PlayerTableCellLink>
+                        </td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={player.playerId}
+                            serverId={server.serverId}
+                          >
+                            {player.kdr.toFixed(2)}
+                          </PlayerTableCellLink>
+                        </td>
                       </tr>
                     ))
                   )}

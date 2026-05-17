@@ -5,7 +5,11 @@ import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete-input";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
 import {
   getAllServersLeaderboard,
@@ -166,26 +170,45 @@ export default async function AllServersLeadersPage({
               ) : (
                 (view === "weekly" ? weeklyResult?.players ?? [] : result?.players ?? []).map(
                   (player, index) => (
-                    <tr key={player.playerId} className={ui.tableRow}>
+                    <tr key={player.playerId} className={playerTableRowClass(ui.tableRow)}>
                       <td className={ui.td}>
-                        {view === "weekly" || !result ? (
-                          <WeeklyLeaderboardRank rank={index + 1} />
-                        ) : (
-                          (result.page - 1) * result.pageSize + index + 1
-                        )}
+                        <PlayerTableCellLink playerId={player.playerId}>
+                          {view === "weekly" || !result ? (
+                            <WeeklyLeaderboardRank rank={index + 1} />
+                          ) : (
+                            (result.page - 1) * result.pageSize + index + 1
+                          )}
+                        </PlayerTableCellLink>
                       </td>
                       <td className={ui.td}>
-                        <PlayerLink
-                          playerId={player.playerId}
-                          soldierName={player.soldierName}
-                          countryCode={player.countryCode}
-                        />
-                        <PlayerDisciplineBadge status={player.banStatus} />
+                        <PlayerTableCellLink playerId={player.playerId}>
+                          <PlayerIdentity
+                            soldierName={player.soldierName}
+                            countryCode={player.countryCode}
+                          />
+                          <PlayerDisciplineBadge status={player.banStatus} />
+                        </PlayerTableCellLink>
                       </td>
-                      <td className={ui.td}>{player.score}</td>
-                      <td className={ui.td}>{player.kills}</td>
-                      <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                      <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink playerId={player.playerId}>
+                          {player.score}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink playerId={player.playerId}>
+                          {player.kills}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink playerId={player.playerId}>
+                          {player.kdr.toFixed(2)}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink playerId={player.playerId}>
+                          {player.hsr.toFixed(2)}%
+                        </PlayerTableCellLink>
+                      </td>
                     </tr>
                   )
                 )

@@ -5,7 +5,11 @@ import { ChatAutoRefresh } from "@/components/chat/chat-auto-refresh";
 import { ChatSearchForm } from "@/components/chat/chat-search-form";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import { SubsetBadge } from "@/components/stats/subset-badge";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
@@ -167,26 +171,51 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                 result.entries.map((entry, index) => (
                   <tr
                     key={entry.id}
-                    className={ui.tableRow}
+                    className={playerTableRowClass(ui.tableRow)}
                   >
                     <td className={ui.td}>
-                      {(result.page - 1) * result.pageSize + index + 1}
-                    </td>
-                    <td className={`${ui.td} whitespace-nowrap`}>{entry.logDate}</td>
-                    <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerLink
+                      <PlayerTableCellLink
                         playerId={entry.playerId}
-                        soldierName={entry.soldierName}
-                        countryCode={entry.countryCode}
                         serverId={server.serverId}
-                      />
-                      <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
+                      >
+                        {(result.page - 1) * result.pageSize + index + 1}
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={`${ui.td} whitespace-nowrap`}>
+                      <PlayerTableCellLink
+                        playerId={entry.playerId}
+                        serverId={server.serverId}
+                      >
+                        {entry.logDate}
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={`${ui.td} whitespace-nowrap`}>
+                      <PlayerTableCellLink
+                        playerId={entry.playerId}
+                        serverId={server.serverId}
+                      >
+                        <PlayerIdentity
+                          soldierName={entry.soldierName}
+                          countryCode={entry.countryCode}
+                        />
+                        <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
+                      </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                      <SubsetBadge subset={entry.subset} />
+                      <PlayerTableCellLink
+                        playerId={entry.playerId}
+                        serverId={server.serverId}
+                      >
+                        <SubsetBadge subset={entry.subset} />
+                      </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} text-slate-300`}>
-                      {entry.message}
+                      <PlayerTableCellLink
+                        playerId={entry.playerId}
+                        serverId={server.serverId}
+                      >
+                        {entry.message}
+                      </PlayerTableCellLink>
                     </td>
                   </tr>
                 ))

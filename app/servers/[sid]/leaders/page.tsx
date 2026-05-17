@@ -6,7 +6,11 @@ import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete-input";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
@@ -240,33 +244,69 @@ export default async function LeadersPage({
               ) : (
                 (view === "weekly" ? weeklyResult?.players ?? [] : result?.players ?? []).map(
                   (player, index) => (
-                  <tr
-                    key={player.playerId}
-                    className={ui.tableRow}
-                  >
-                    <td className={ui.td}>
-                      {view === "weekly" ? (
-                        <WeeklyLeaderboardRank rank={index + 1} />
-                      ) : result ? (
-                        (result.page - 1) * result.pageSize + index + 1
-                      ) : (
-                        index + 1
-                      )}
-                    </td>
-                    <td className={ui.td}>
-                      <PlayerLink
-                        playerId={player.playerId}
-                        soldierName={player.soldierName}
-                        countryCode={player.countryCode}
-                        serverId={server.serverId}
-                      />
-                      <PlayerDisciplineBadge status={player.banStatus} />
-                    </td>
-                    <td className={ui.td}>{player.score}</td>
-                    <td className={ui.td}>{player.kills}</td>
-                    <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                    <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
-                  </tr>
+                    <tr
+                      key={player.playerId}
+                      className={playerTableRowClass(ui.tableRow)}
+                    >
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={player.playerId}
+                          serverId={server.serverId}
+                        >
+                          {view === "weekly" ? (
+                            <WeeklyLeaderboardRank rank={index + 1} />
+                          ) : result ? (
+                            (result.page - 1) * result.pageSize + index + 1
+                          ) : (
+                            index + 1
+                          )}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={player.playerId}
+                          serverId={server.serverId}
+                        >
+                          <PlayerIdentity
+                            soldierName={player.soldierName}
+                            countryCode={player.countryCode}
+                          />
+                          <PlayerDisciplineBadge status={player.banStatus} />
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={player.playerId}
+                          serverId={server.serverId}
+                        >
+                          {player.score}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={player.playerId}
+                          serverId={server.serverId}
+                        >
+                          {player.kills}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={player.playerId}
+                          serverId={server.serverId}
+                        >
+                          {player.kdr.toFixed(2)}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={player.playerId}
+                          serverId={server.serverId}
+                        >
+                          {player.hsr.toFixed(2)}%
+                        </PlayerTableCellLink>
+                      </td>
+                    </tr>
                   )
                 )
               )}

@@ -4,6 +4,10 @@ import Image from "next/image";
 import { useMemo, useState } from "react";
 import { SegmentedTabs } from "@/components/layout/segmented-tabs";
 import { ui } from "@/components/layout/stats-ui";
+import {
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 
 export type DogtagView = "collected" | "surrendered";
 
@@ -68,10 +72,6 @@ function resolveInitialWeaponCategory(
   }
 
   return categories[0]?.categoryKey ?? null;
-}
-
-function playerHref(playerId: number, serverId: number | null): string {
-  return serverId === null ? `/players/${playerId}` : `/players/${playerId}?sid=${serverId}`;
 }
 
 export function PlayerProfileSections({
@@ -252,18 +252,32 @@ export function PlayerProfileSections({
                     dogtagCollections.entries.map((entry, index) => (
                       <tr
                         key={`${entry.victimId}-${index}`}
-                        className={ui.tableRow}
+                        className={playerTableRowClass(ui.tableRow)}
                       >
-                        <td className={ui.td}>{index + 1}</td>
                         <td className={ui.td}>
-                          <a
-                            href={playerHref(entry.victimId, serverId)}
-                            className="text-slate-100 hover:text-white"
+                          <PlayerTableCellLink
+                            playerId={entry.victimId}
+                            serverId={serverId}
+                          >
+                            {index + 1}
+                          </PlayerTableCellLink>
+                        </td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={entry.victimId}
+                            serverId={serverId}
                           >
                             {entry.victimName}
-                          </a>
+                          </PlayerTableCellLink>
                         </td>
-                        <td className={ui.td}>{entry.tagCount}</td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink
+                            playerId={entry.victimId}
+                            serverId={serverId}
+                          >
+                            {entry.tagCount}
+                          </PlayerTableCellLink>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -296,18 +310,32 @@ export function PlayerProfileSections({
                   dogtagLosses.entries.map((entry, index) => (
                     <tr
                       key={`${entry.killerId}-${index}`}
-                      className={ui.tableRow}
+                      className={playerTableRowClass(ui.tableRow)}
                     >
-                      <td className={ui.td}>{index + 1}</td>
                       <td className={ui.td}>
-                        <a
-                          href={playerHref(entry.killerId, serverId)}
-                          className="text-slate-100 hover:text-white"
+                        <PlayerTableCellLink
+                          playerId={entry.killerId}
+                          serverId={serverId}
+                        >
+                          {index + 1}
+                        </PlayerTableCellLink>
+                      </td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={entry.killerId}
+                          serverId={serverId}
                         >
                           {entry.killerName}
-                        </a>
+                        </PlayerTableCellLink>
                       </td>
-                      <td className={ui.td}>{entry.tagCount}</td>
+                      <td className={ui.td}>
+                        <PlayerTableCellLink
+                          playerId={entry.killerId}
+                          serverId={serverId}
+                        >
+                          {entry.tagCount}
+                        </PlayerTableCellLink>
+                      </td>
                     </tr>
                   ))
                 )}

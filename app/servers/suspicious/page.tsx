@@ -3,7 +3,11 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
-import { PlayerLink } from "@/components/stats/player-link";
+import {
+  PlayerIdentity,
+  PlayerTableCellLink,
+  playerTableRowClass
+} from "@/components/stats/player-link";
 import {
   getSuspiciousPlayers,
   parseSuspiciousPage,
@@ -91,21 +95,36 @@ export default async function AllServersSuspiciousPage({
                 </tr>
               ) : (
                 result.players.map((player, index) => (
-                  <tr key={player.playerId} className={ui.tableRow}>
+                  <tr key={player.playerId} className={playerTableRowClass(ui.tableRow)}>
                     <td className={ui.td}>
-                      {(result.page - 1) * result.pageSize + index + 1}
+                      <PlayerTableCellLink playerId={player.playerId}>
+                        {(result.page - 1) * result.pageSize + index + 1}
+                      </PlayerTableCellLink>
                     </td>
                     <td className={ui.td}>
-                      <PlayerLink
-                        playerId={player.playerId}
-                        soldierName={player.soldierName}
-                        countryCode={player.countryCode}
-                      />
-                      <PlayerDisciplineBadge status={player.banStatus} />
+                      <PlayerTableCellLink playerId={player.playerId}>
+                        <PlayerIdentity
+                          soldierName={player.soldierName}
+                          countryCode={player.countryCode}
+                        />
+                        <PlayerDisciplineBadge status={player.banStatus} />
+                      </PlayerTableCellLink>
                     </td>
-                    <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                    <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
-                    <td className={ui.td}>{player.rounds}</td>
+                    <td className={ui.td}>
+                      <PlayerTableCellLink playerId={player.playerId}>
+                        {player.kdr.toFixed(2)}
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={ui.td}>
+                      <PlayerTableCellLink playerId={player.playerId}>
+                        {player.hsr.toFixed(2)}%
+                      </PlayerTableCellLink>
+                    </td>
+                    <td className={ui.td}>
+                      <PlayerTableCellLink playerId={player.playerId}>
+                        {player.rounds}
+                      </PlayerTableCellLink>
+                    </td>
                   </tr>
                 ))
               )}
