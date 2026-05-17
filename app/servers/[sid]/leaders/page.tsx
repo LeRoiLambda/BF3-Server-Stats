@@ -7,6 +7,7 @@ import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
+import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
   getWeeklyServerLeaderboard,
@@ -244,11 +245,13 @@ export default async function LeadersPage({
                     className={ui.tableRow}
                   >
                     <td className={ui.td}>
-                      {view === "weekly"
-                        ? index + 1
-                        : result
-                          ? (result.page - 1) * result.pageSize + index + 1
-                          : index + 1}
+                      {view === "weekly" ? (
+                        <WeeklyLeaderboardRank rank={index + 1} />
+                      ) : result ? (
+                        (result.page - 1) * result.pageSize + index + 1
+                      ) : (
+                        index + 1
+                      )}
                     </td>
                     <td className={ui.td}>
                       <PlayerLink

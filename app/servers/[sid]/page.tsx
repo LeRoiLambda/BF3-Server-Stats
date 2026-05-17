@@ -5,6 +5,7 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { PlayerLink } from "@/components/stats/player-link";
+import { WeeklyLeaderboardSection } from "@/components/stats/weekly-leaderboard-section";
 import {
   formatGamemodeName,
   formatMapName,
@@ -362,68 +363,12 @@ export default async function ServerHomePage({
           )}
         </article>
 
-        <article className={ui.panel}>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className={ui.sectionTitle}>Top 20 This Week</h2>
-            <a
-              href={fullLeadersHref}
-              className={ui.buttonLink}
-            >
-              Full Leaders Page
-            </a>
-          </div>
-          <div className={ui.tableShell}>
-            <table className={ui.table}>
-              <thead className={ui.tableHead}>
-                <tr>
-                  <th className={ui.th}>#</th>
-                  <th className={ui.th}>Player</th>
-                  <th className={ui.th}>Score</th>
-                  <th className={ui.th}>Kills</th>
-                  <th className={ui.th}>KDR</th>
-                  <th className={ui.th}>HSR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!weeklyTopPlayers.available ? (
-                  <tr className={ui.tableRow}>
-                    <td className={ui.emptyCell} colSpan={6}>
-                      Weekly ranking is unavailable because session history is not present.
-                    </td>
-                  </tr>
-                ) : weeklyTopPlayers.players.length === 0 ? (
-                  <tr className={ui.tableRow}>
-                    <td className={ui.emptyCell} colSpan={6}>
-                      No session stats found this week.
-                    </td>
-                  </tr>
-                ) : (
-                  weeklyTopPlayers.players.map((player, index) => (
-                    <tr
-                      key={player.playerId}
-                      className={ui.tableRow}
-                    >
-                      <td className={ui.td}>{index + 1}</td>
-                      <td className={ui.td}>
-                        <PlayerLink
-                          playerId={player.playerId}
-                          soldierName={player.soldierName}
-                          countryCode={player.countryCode}
-                          serverId={server.serverId}
-                        />
-                        <PlayerDisciplineBadge status={player.banStatus} />
-                      </td>
-                      <td className={ui.td}>{player.score}</td>
-                      <td className={ui.td}>{player.kills}</td>
-                      <td className={ui.td}>{player.kdr.toFixed(2)}</td>
-                      <td className={ui.td}>{player.hsr.toFixed(2)}%</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </article>
+        <WeeklyLeaderboardSection
+          result={weeklyTopPlayers}
+          fullLeadersHref={fullLeadersHref}
+          serverId={server.serverId}
+          as="article"
+        />
       </section>
     </StatsShell>
   );

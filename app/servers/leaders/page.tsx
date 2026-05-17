@@ -6,6 +6,7 @@ import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
 import { PlayerLink } from "@/components/stats/player-link";
+import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
 import {
   getAllServersLeaderboard,
   getAllServersWeeklyLeaderboard,
@@ -167,9 +168,11 @@ export default async function AllServersLeadersPage({
                   (player, index) => (
                     <tr key={player.playerId} className={ui.tableRow}>
                       <td className={ui.td}>
-                        {view === "weekly" || !result
-                          ? index + 1
-                          : (result.page - 1) * result.pageSize + index + 1}
+                        {view === "weekly" || !result ? (
+                          <WeeklyLeaderboardRank rank={index + 1} />
+                        ) : (
+                          (result.page - 1) * result.pageSize + index + 1
+                        )}
                       </td>
                       <td className={ui.td}>
                         <PlayerLink
