@@ -189,7 +189,7 @@ export default async function ServerHomePage({
     >
       <RouteAutoRefresh intervalMs={30000} />
       <section className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
-        <div className="relative aspect-[992/164] min-h-[86px] bg-slate-900">
+        <div className="relative aspect-[16/7] min-h-[142px] bg-slate-900 sm:aspect-[992/164] sm:min-h-[164px]">
           {currentMapImagePath ? (
             <Image
               src={currentMapImagePath}
@@ -200,27 +200,27 @@ export default async function ServerHomePage({
               priority
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/45 via-slate-950/10 to-slate-950/35" />
-        </div>
-        <div className="min-w-0 p-4 sm:p-5">
-          <div className="flex items-start justify-between gap-3">
-            <p className={ui.sectionTitle}>Current Round</p>
-            <span className="rounded-sm border border-slate-600/50 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-              Refresh 30s
-            </span>
-          </div>
-          <div className="mt-3 min-w-0">
-            <div className="min-w-0">
-              <h2 className="break-words text-2xl font-semibold text-slate-50">
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/82 via-slate-950/30 to-slate-950/58" />
+          <div className="absolute inset-0 flex min-w-0 flex-col justify-between p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className={ui.sectionTitle}>Current Round</p>
+              <span className="shrink-0 rounded-sm border border-slate-300/35 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 shadow-sm">
+                Refresh 30s
+              </span>
+            </div>
+            <div className="min-w-0 pr-10 sm:pr-24">
+              <h2 className="break-words text-2xl font-semibold leading-tight text-slate-50 drop-shadow sm:text-3xl">
                 {formatMapName(server.mapName)}
               </h2>
-              <p className="mt-1 text-sm text-slate-300">
+              <p className="mt-1 text-sm font-medium text-slate-200 drop-shadow">
                 {formatGamemodeName(server.gameMode)}
               </p>
             </div>
           </div>
+        </div>
 
-          <dl className="mt-5 grid overflow-hidden rounded-sm border border-slate-700/60 sm:grid-cols-2">
+        <div className="min-w-0 p-4 sm:p-5">
+          <dl className="grid overflow-hidden rounded-sm border border-slate-700/60 sm:grid-cols-2">
             <div className="min-w-0 p-3 sm:p-4">
               <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
                 Players
