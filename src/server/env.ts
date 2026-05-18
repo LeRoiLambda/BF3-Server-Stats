@@ -1,7 +1,17 @@
 import { z } from "zod";
 
 const DEFAULT_BANNER_IMAGE = "/images/bf3-logo.png";
+const DEFAULT_WEEK_TIME_ZONE = "America/Los_Angeles";
 const LEGACY_PUBLIC_IMAGE_PREFIXES = ["./common/images/", "common/images/"];
+
+function isValidTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function normalizeBannerImagePath(value: string): string {
   const imagePath = value.trim();
@@ -43,7 +53,12 @@ const envSchema = z.object({
     .trim()
     .min(1)
     .default(DEFAULT_BANNER_IMAGE)
-    .transform(normalizeBannerImagePath)
+    .transform(normalizeBannerImagePath),
+  BF3_STATS_WEEK_TIME_ZONE: z.string()
+    .trim()
+    .min(1)
+    .refine(isValidTimeZone, "BF3_STATS_WEEK_TIME_ZONE must be a valid IANA time zone")
+    .default(DEFAULT_WEEK_TIME_ZONE)
 });
 
 export type RuntimeEnv = z.infer<typeof envSchema>;

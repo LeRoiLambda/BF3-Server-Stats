@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { readEnv } from "@/src/server/env";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 
 export type LeaderSort = "soldierName" | "score" | "kills" | "kdr" | "hsr";
@@ -51,6 +52,7 @@ export type LeaderboardResult = {
 export type WeeklyLeaderboardResult = {
   available: boolean;
   players: LeaderboardPlayer[];
+  resetAt: string;
 };
 
 type PlayerRow = RowDataPacket & {
@@ -122,6 +124,115 @@ async function hasAdkatsBansTable(): Promise<boolean> {
 
 async function hasSessionsTable(): Promise<boolean> {
   return hasTable("tbl_sessions");
+}
+
+function formatMysqlUtcDateTime(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hours = String(date.getUTCHours()).padStart(2, "0");
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(date.getUTCSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function getWeekTimeZoneParts(date: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: readEnv().BF3_STATS_WEEK_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second)
+  };
+}
+
+function weekTimeZoneDateTimeToUtcDate(input: {
+  year: number;
+  month: number;
+  day: number;
+  hour?: number;
+  minute?: number;
+  second?: number;
+}): Date {
+  const utcGuess = new Date(Date.UTC(
+    input.year,
+    input.month - 1,
+    input.day,
+    input.hour ?? 0,
+    input.minute ?? 0,
+    input.second ?? 0
+  ));
+  const guessedParts = getWeekTimeZoneParts(utcGuess);
+  const guessedLocalAsUtc = Date.UTC(
+    guessedParts.year,
+    guessedParts.month - 1,
+    guessedParts.day,
+    guessedParts.hour,
+    guessedParts.minute,
+    guessedParts.second
+  );
+  const timeZoneOffset = guessedLocalAsUtc - utcGuess.getTime();
+
+  return new Date(utcGuess.getTime() - timeZoneOffset);
+}
+
+function currentWeekWindow(): {
+  startSql: string;
+  endSql: string;
+  resetAt: string;
+} {
+  const today = getWeekTimeZoneParts(new Date());
+  const localToday = new Date(Date.UTC(
+    today.year,
+    today.month - 1,
+    today.day
+  ));
+  const daysSinceMonday = (localToday.getUTCDay() + 6) % 7;
+  const localStart = new Date(localToday);
+  localStart.setUTCDate(localStart.getUTCDate() - daysSinceMonday);
+
+  const localEnd = new Date(localStart);
+  localEnd.setUTCDate(localEnd.getUTCDate() + 7);
+
+  const start = weekTimeZoneDateTimeToUtcDate({
+    year: localStart.getUTCFullYear(),
+    month: localStart.getUTCMonth() + 1,
+    day: localStart.getUTCDate()
+  });
+  const end = weekTimeZoneDateTimeToUtcDate({
+    year: localEnd.getUTCFullYear(),
+    month: localEnd.getUTCMonth() + 1,
+    day: localEnd.getUTCDate()
+  });
+
+  return {
+    startSql: formatMysqlUtcDateTime(start),
+    endSql: formatMysqlUtcDateTime(end),
+    resetAt: end.toISOString()
+  };
 }
 
 function normalizeSort(sort: string | null): LeaderSort {
@@ -421,11 +532,13 @@ export async function getWeeklyServerLeaderboard(input: {
   gameId: number;
   limit?: number;
 }): Promise<WeeklyLeaderboardResult> {
+  const weekWindow = currentWeekWindow();
   const sessionsAvailable = await hasSessionsTable();
   if (!sessionsAvailable) {
     return {
       available: false,
-      players: []
+      players: [],
+      resetAt: weekWindow.resetAt
     };
   }
 
@@ -439,42 +552,71 @@ export async function getWeeklyServerLeaderboard(input: {
         tpd.PlayerID AS playerId,
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
-        SUM(tss.Score) AS score,
-        SUM(tss.Kills) AS kills,
-        (SUM(tss.Kills) / NULLIF(SUM(tss.Deaths), 0)) AS kdr,
-        ((SUM(tss.Headshots) / NULLIF(SUM(tss.Kills), 0)) * 100) AS hsr
+        SUM(weeklyStats.score) AS score,
+        SUM(weeklyStats.kills) AS kills,
+        (SUM(weeklyStats.kills) / NULLIF(SUM(weeklyStats.deaths), 0)) AS kdr,
+        ((SUM(weeklyStats.headshots) / NULLIF(SUM(weeklyStats.kills), 0)) * 100) AS hsr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-      FROM tbl_sessions tss
-      INNER JOIN tbl_server_player tsp ON tss.StatsID = tsp.StatsID
-      INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
+      FROM (
+        SELECT
+          tsp.PlayerID AS playerId,
+          tss.Score AS score,
+          tss.Kills AS kills,
+          tss.Headshots AS headshots,
+          tss.Deaths AS deaths
+        FROM tbl_sessions tss
+        INNER JOIN tbl_server_player tsp ON tss.StatsID = tsp.StatsID
+        INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
+        WHERE tsp.ServerID = ?
+          AND tpd.GameID = ?
+          AND tss.StartTime >= ?
+          AND tss.StartTime < ?
+        UNION ALL
+        SELECT
+          resolved.playerId AS playerId,
+          cp.Score AS score,
+          cp.Kills AS kills,
+          cp.Headshots AS headshots,
+          cp.Deaths AS deaths
+        FROM tbl_currentplayers cp
+        INNER JOIN (
+          SELECT
+            MIN(tpd.PlayerID) AS playerId,
+            tpd.SoldierName AS soldierName
+          FROM tbl_playerdata tpd
+          INNER JOIN tbl_server_player tsp ON tsp.PlayerID = tpd.PlayerID
+          WHERE tpd.GameID = ?
+            AND tsp.ServerID = ?
+          GROUP BY tpd.SoldierName
+        ) resolved ON resolved.soldierName = cp.Soldiername
+        WHERE cp.ServerID = ?
+          AND cp.PlayerJoined >= ?
+          AND cp.PlayerJoined < ?
+      ) weeklyStats
+      INNER JOIN tbl_playerdata tpd ON weeklyStats.playerId = tpd.PlayerID
       ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-      WHERE tsp.ServerID = ?
-        AND tpd.GameID = ?
-        AND tss.Starttime BETWEEN CURDATE() - INTERVAL 7 DAY AND CURDATE()
       GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
       ORDER BY score DESC, tpd.SoldierName ASC
       LIMIT ?
     `,
-    [input.serverId, input.gameId, safeLimit]
+    [
+      input.serverId,
+      input.gameId,
+      weekWindow.startSql,
+      weekWindow.endSql,
+      input.gameId,
+      input.serverId,
+      input.serverId,
+      weekWindow.startSql,
+      weekWindow.endSql,
+      safeLimit
+    ]
   );
 
   return {
     available: true,
-    players: rows.map((row) => ({
-      playerId: Number(row.playerId),
-      soldierName: row.soldierName,
-      countryCode: row.countryCode,
-      score: Number(row.score ?? 0),
-      kills: Number(row.kills ?? 0),
-      kdr: toFixedNumber(row.kdr),
-      hsr: toFixedNumber(row.hsr),
-      banStatus:
-        row.banStatus === "Active"
-          ? "active"
-          : row.banStatus === "Expired"
-            ? "expired"
-            : null
-    }))
+    players: rows.map(toLeaderboardPlayer),
+    resetAt: weekWindow.resetAt
   };
 }
 
@@ -483,6 +625,7 @@ export async function getAllServersWeeklyLeaderboard(input: {
   gameId: number;
   limit?: number;
 }): Promise<WeeklyLeaderboardResult> {
+  const weekWindow = currentWeekWindow();
   const serverIds = Array.from(
     new Set(
       input.serverIds
@@ -493,7 +636,8 @@ export async function getAllServersWeeklyLeaderboard(input: {
   if (serverIds.length === 0) {
     return {
       available: true,
-      players: []
+      players: [],
+      resetAt: weekWindow.resetAt
     };
   }
 
@@ -501,7 +645,8 @@ export async function getAllServersWeeklyLeaderboard(input: {
   if (!sessionsAvailable) {
     return {
       available: false,
-      players: []
+      players: [],
+      resetAt: weekWindow.resetAt
     };
   }
 
@@ -516,42 +661,71 @@ export async function getAllServersWeeklyLeaderboard(input: {
         tpd.PlayerID AS playerId,
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
-        SUM(tss.Score) AS score,
-        SUM(tss.Kills) AS kills,
-        (SUM(tss.Kills) / NULLIF(SUM(tss.Deaths), 0)) AS kdr,
-        ((SUM(tss.Headshots) / NULLIF(SUM(tss.Kills), 0)) * 100) AS hsr
+        SUM(weeklyStats.score) AS score,
+        SUM(weeklyStats.kills) AS kills,
+        (SUM(weeklyStats.kills) / NULLIF(SUM(weeklyStats.deaths), 0)) AS kdr,
+        ((SUM(weeklyStats.headshots) / NULLIF(SUM(weeklyStats.kills), 0)) * 100) AS hsr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-      FROM tbl_sessions tss
-      INNER JOIN tbl_server_player tsp ON tss.StatsID = tsp.StatsID
-      INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
+      FROM (
+        SELECT
+          tsp.PlayerID AS playerId,
+          tss.Score AS score,
+          tss.Kills AS kills,
+          tss.Headshots AS headshots,
+          tss.Deaths AS deaths
+        FROM tbl_sessions tss
+        INNER JOIN tbl_server_player tsp ON tss.StatsID = tsp.StatsID
+        INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
+        WHERE tsp.ServerID IN (${serverPlaceholders})
+          AND tpd.GameID = ?
+          AND tss.StartTime >= ?
+          AND tss.StartTime < ?
+        UNION ALL
+        SELECT
+          resolved.playerId AS playerId,
+          cp.Score AS score,
+          cp.Kills AS kills,
+          cp.Headshots AS headshots,
+          cp.Deaths AS deaths
+        FROM tbl_currentplayers cp
+        INNER JOIN (
+          SELECT
+            MIN(tpd.PlayerID) AS playerId,
+            tpd.SoldierName AS soldierName
+          FROM tbl_playerdata tpd
+          INNER JOIN tbl_server_player tsp ON tsp.PlayerID = tpd.PlayerID
+          WHERE tpd.GameID = ?
+            AND tsp.ServerID IN (${serverPlaceholders})
+          GROUP BY tpd.SoldierName
+        ) resolved ON resolved.soldierName = cp.Soldiername
+        WHERE cp.ServerID IN (${serverPlaceholders})
+          AND cp.PlayerJoined >= ?
+          AND cp.PlayerJoined < ?
+      ) weeklyStats
+      INNER JOIN tbl_playerdata tpd ON weeklyStats.playerId = tpd.PlayerID
       ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-      WHERE tsp.ServerID IN (${serverPlaceholders})
-        AND tpd.GameID = ?
-        AND tss.Starttime BETWEEN CURDATE() - INTERVAL 7 DAY AND CURDATE()
       GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
       ORDER BY score DESC, tpd.SoldierName ASC
       LIMIT ?
     `,
-    [...serverIds, input.gameId, safeLimit]
+    [
+      ...serverIds,
+      input.gameId,
+      weekWindow.startSql,
+      weekWindow.endSql,
+      input.gameId,
+      ...serverIds,
+      ...serverIds,
+      weekWindow.startSql,
+      weekWindow.endSql,
+      safeLimit
+    ]
   );
 
   return {
     available: true,
-    players: rows.map((row) => ({
-      playerId: Number(row.playerId),
-      soldierName: row.soldierName,
-      countryCode: row.countryCode,
-      score: Number(row.score ?? 0),
-      kills: Number(row.kills ?? 0),
-      kdr: toFixedNumber(row.kdr),
-      hsr: toFixedNumber(row.hsr),
-      banStatus:
-        row.banStatus === "Active"
-          ? "active"
-          : row.banStatus === "Expired"
-            ? "expired"
-            : null
-    }))
+    players: rows.map(toLeaderboardPlayer),
+    resetAt: weekWindow.resetAt
   };
 }
 

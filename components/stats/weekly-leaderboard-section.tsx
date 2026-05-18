@@ -15,6 +15,7 @@ import {
   WeeklyLeaderboardRank,
   type WeeklyLeaderboardPodiumRank
 } from "@/components/stats/weekly-leaderboard-rank";
+import { WeeklyResetCountdown } from "@/components/stats/weekly-reset-countdown";
 import type {
   LeaderboardPlayer,
   WeeklyLeaderboardResult
@@ -288,7 +289,7 @@ export function WeeklyLeaderboardSection({
         <div>
           <h2 className={ui.sectionTitle}>Top 20 This Week</h2>
           <p className="mt-1 text-xs text-slate-400">
-            Session totals over the last 7 days.
+            <WeeklyResetCountdown resetAt={result.resetAt} initialNow={Date.now()} />
           </p>
         </div>
         <Link href={fullLeadersHref} className={ui.buttonLink}>
@@ -304,7 +305,7 @@ export function WeeklyLeaderboardSection({
         </div>
       ) : result.players.length === 0 ? (
         <div className={ui.tableShell}>
-          <div className={ui.emptyCell}>No session stats found this week.</div>
+          <div className={ui.emptyCell}>No weekly stats found yet.</div>
         </div>
       ) : (
         <>
