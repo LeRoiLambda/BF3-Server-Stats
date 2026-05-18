@@ -5,6 +5,7 @@ import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
 import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete-input";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
+import { RouteAutoRefresh } from "@/components/stats/route-auto-refresh";
 import {
   PlayerIdentity,
   PlayerTableCellLink,
@@ -79,6 +80,7 @@ export default async function AllServersLeadersPage({
       servers={scope.context.servers}
       activeSection="leaders"
     >
+      {view === "weekly" ? <RouteAutoRefresh intervalMs={30000} /> : null}
       <section className={ui.panel}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <SegmentedNav
@@ -158,13 +160,13 @@ export default async function AllServersLeadersPage({
               ) : view === "weekly" && weeklyResult && !weeklyResult.available ? (
                 <tr className={ui.tableRow}>
                   <td className={ui.emptyCell} colSpan={6}>
-                    Weekly leaderboard is unavailable because `tbl_sessions` is missing.
+                    Weekly leaderboard is unavailable because session history is missing.
                   </td>
                 </tr>
               ) : view === "weekly" && weeklyResult?.available && weeklyResult.players.length === 0 ? (
                 <tr className={ui.tableRow}>
                   <td className={ui.emptyCell} colSpan={6}>
-                    No session stats found this week.
+                    No weekly stats found yet.
                   </td>
                 </tr>
               ) : (
