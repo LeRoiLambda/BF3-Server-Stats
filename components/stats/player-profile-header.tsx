@@ -336,7 +336,9 @@ export function PlayerProfileHeader({
             </span>
             {moderation.available && moderation.muteStatus.active ? (
               <span className="inline-flex min-h-7 w-fit items-center rounded-sm border border-sky-300/40 bg-sky-950/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-100">
-                Chat muted
+                {moderation.muteStatus.muteDuration === "permanent"
+                  ? "Permanent mute"
+                  : "Chat muted"}
               </span>
             ) : null}
           </div>
@@ -422,7 +424,9 @@ export function PlayerProfileHeader({
               </span>
               {moderation.available && moderation.muteStatus.active ? (
                 <span className="inline-flex min-h-7 w-fit items-center rounded-sm border border-sky-300/40 bg-sky-950/45 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-100">
-                  Chat muted
+                  {moderation.muteStatus.muteDuration === "permanent"
+                    ? "Permanent mute"
+                    : "Chat muted"}
                 </span>
               ) : null}
             </div>
