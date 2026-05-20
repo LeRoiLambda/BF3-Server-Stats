@@ -39,6 +39,8 @@ export type ServerRoundSnapshot = {
 export type ServerDailyPlayersSnapshot = {
   date: string;
   averagePlayers: number;
+  peakPlayers: number;
+  roundCount: number;
 };
 
 type ServerDetailStatsRow = RowDataPacket & {
@@ -72,6 +74,8 @@ type ServerRoundSnapshotRow = RowDataPacket & {
 type ServerDailyPlayersSnapshotRow = RowDataPacket & {
   dateValue: string | Date | null;
   averagePlayers: number | null;
+  peakPlayers: number | null;
+  roundCount: number | null;
 };
 
 export async function getServerDetailStats(
@@ -196,7 +200,9 @@ export async function listServerDailyPlayerTrend(
     `
       SELECT
         DATE(TimeMapLoad) AS dateValue,
-        AVG(MaxPlayers) AS averagePlayers
+        AVG(MaxPlayers) AS averagePlayers,
+        MAX(MaxPlayers) AS peakPlayers,
+        COUNT(*) AS roundCount
       FROM tbl_mapstats
       WHERE ${scope.sql}
         AND Gamemode != ''
@@ -213,6 +219,8 @@ export async function listServerDailyPlayerTrend(
       row.dateValue instanceof Date
         ? row.dateValue.toISOString().slice(0, 10)
         : String(row.dateValue ?? ""),
-    averagePlayers: toFixedNumber(row.averagePlayers)
+    averagePlayers: toFixedNumber(row.averagePlayers),
+    peakPlayers: Number(row.peakPlayers ?? 0),
+    roundCount: Number(row.roundCount ?? 0)
   }));
 }
