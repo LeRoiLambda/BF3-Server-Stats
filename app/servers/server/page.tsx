@@ -1,5 +1,6 @@
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
+import { DailyPlayerTrendChart } from "@/components/stats/daily-player-trend-chart";
 import { formatGamemodeName, formatMapName } from "@/src/server/domain/bf3-reference";
 import {
   getServerDetailStats,
@@ -15,7 +16,7 @@ export default async function AllServersServerInfoPage() {
   const [stats, recentRounds, dailyTrend] = await Promise.all([
     getServerDetailStats({ serverIds: scope.serverIds }),
     listRecentServerRounds({ serverIds: scope.serverIds }, 15),
-    listServerDailyPlayerTrend({ serverIds: scope.serverIds }, 7)
+    listServerDailyPlayerTrend({ serverIds: scope.serverIds }, 14)
   ]);
 
   return (
@@ -83,38 +84,7 @@ export default async function AllServersServerInfoPage() {
         </>
       )}
 
-      <section className={`mt-6 ${ui.panel}`}>
-        <h2 className={ui.sectionTitle}>Daily Player Trend</h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Average peak players over the last 7 days with round activity.
-        </p>
-        <div className={`mt-3 ${ui.tableShell}`}>
-          <table className={ui.table}>
-            <thead className={ui.tableHead}>
-              <tr>
-                <th className={ui.th}>Date</th>
-                <th className={ui.th}>Avg Peak Players</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dailyTrend.length === 0 ? (
-                <tr className={ui.tableRow}>
-                  <td className={ui.emptyCell} colSpan={2}>
-                    No daily trend data found.
-                  </td>
-                </tr>
-              ) : (
-                dailyTrend.map((entry) => (
-                  <tr key={entry.date} className={ui.tableRow}>
-                    <td className={ui.td}>{entry.date}</td>
-                    <td className={ui.td}>{entry.averagePlayers.toFixed(2)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <DailyPlayerTrendChart data={dailyTrend} />
 
       <section className={`mt-6 ${ui.panel}`}>
         <h2 className={`mb-3 ${ui.sectionTitle}`}>Recent Rounds</h2>
