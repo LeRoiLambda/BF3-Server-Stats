@@ -30,6 +30,7 @@ type AllServersBansPageProps = {
 };
 
 const SORT_LABELS: Record<BanSort, string> = {
+  date: "Date",
   soldierName: "Player",
   kdr: "KDR",
   hsr: "HSR"
@@ -100,7 +101,7 @@ export default async function AllServersBansPage({
                 <tbody>
                   {result.players.length === 0 ? (
                     <tr className={ui.tableRow}>
-                      <td className={ui.emptyCell} colSpan={5}>
+                      <td className={ui.emptyCell} colSpan={6}>
                         No active bans found.
                       </td>
                     </tr>
@@ -110,6 +111,11 @@ export default async function AllServersBansPage({
                         <td className={ui.td}>
                           <PlayerTableCellLink playerId={player.playerId}>
                             {(result.page - 1) * result.pageSize + index + 1}
+                          </PlayerTableCellLink>
+                        </td>
+                        <td className={ui.td}>
+                          <PlayerTableCellLink playerId={player.playerId}>
+                            {player.bannedAt ?? "Unknown"}
                           </PlayerTableCellLink>
                         </td>
                         <td className={ui.td}>
