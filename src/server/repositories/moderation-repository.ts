@@ -5,6 +5,7 @@ import { toDateTimeString } from "@/src/server/utils/dates";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
 export type ModerationBanDuration = "permanent" | "temporary" | null;
+export type ModerationMuteDuration = "permanent" | "temporary" | null;
 
 export type ModerationStatus = {
   kind: ModerationStatusKind;
@@ -22,6 +23,7 @@ export type ModerationMuteStatus = {
   startedAt: string | null;
   endsAt: string | null;
   durationLabel: string | null;
+  muteDuration: ModerationMuteDuration;
 };
 
 export type ModerationPoints = {
@@ -158,7 +160,8 @@ const DEFAULT_MUTE_STATUS: ModerationMuteStatus = {
   detail: null,
   startedAt: null,
   endsAt: null,
-  durationLabel: null
+  durationLabel: null,
+  muteDuration: null
 };
 
 const LADDER_SETTINGS: Array<{
@@ -207,6 +210,7 @@ const PERMANENT_BAN_COMMAND_TEXTS = new Set(["ban", "fban"]);
 const TEMPORARY_BAN_COMMAND_TEXTS = new Set(["tban"]);
 const PERMANENT_BAN_COMMAND_IDS = new Set([8, 50]);
 const TEMPORARY_BAN_COMMAND_IDS = new Set([7]);
+const PERMANENT_MUTE_MINUTES = 10 * 365 * 24 * 60;
 
 function toFiniteNumber(value: unknown): number {
   const numberValue = Number(value ?? 0);
@@ -418,6 +422,18 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
     return DEFAULT_MUTE_STATUS;
   }
 
+  if (durationMinutes >= PERMANENT_MUTE_MINUTES) {
+    return {
+      active: true,
+      label: "Permanent mute",
+      detail: row.recordMessage || null,
+      startedAt: cleanDateTime(startedAt),
+      endsAt: null,
+      durationLabel: "Permanent",
+      muteDuration: "permanent"
+    };
+  }
+
   const remainingMinutes = Math.max(1, Math.ceil((endsAt.getTime() - Date.now()) / 60000));
 
   return {
@@ -426,7 +442,8 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
     detail: row.recordMessage || null,
     startedAt: cleanDateTime(startedAt),
     endsAt: cleanDateTime(endsAt),
-    durationLabel: `${formatMinutes(remainingMinutes)} left`
+    durationLabel: `${formatMinutes(remainingMinutes)} left`,
+    muteDuration: "temporary"
   };
 }
 
