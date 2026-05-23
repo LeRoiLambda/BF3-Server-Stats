@@ -1,8 +1,8 @@
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { RouteAutoRefresh } from "@/components/stats/route-auto-refresh";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { MapRotationCarousel } from "@/components/stats/map-rotation-carousel";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import {
   PlayerIdentity,
@@ -10,11 +10,7 @@ import {
   playerTableRowClass
 } from "@/components/stats/player-link";
 import { WeeklyLeaderboardSection } from "@/components/stats/weekly-leaderboard-section";
-import {
-  formatGamemodeName,
-  formatMapName,
-  mapImagePath
-} from "@/src/server/domain/bf3-reference";
+import { listServerMapRotation } from "@/src/server/repositories/map-rotation-repository";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import {
   getWeeklyServerLeaderboard,
@@ -146,7 +142,7 @@ export default async function ServerHomePage({
     notFound();
   }
 
-  const [teamScores, weeklyTopPlayers, currentPlayers] =
+  const [teamScores, weeklyTopPlayers, currentPlayers, mapRotation] =
     await Promise.all([
       listTeamScores(server.serverId),
       getWeeklyServerLeaderboard({
@@ -159,7 +155,8 @@ export default async function ServerHomePage({
         gameId: server.gameId,
         sort: scoreboardSort,
         order: scoreboardOrder
-      })
+      }),
+      listServerMapRotation({ serverId: server.serverId })
     ]);
 
   const liveTeams = groupPlayersByTeam(currentPlayers);
@@ -167,17 +164,7 @@ export default async function ServerHomePage({
   const teamScoresById = new Map(
     teamScores.map((team) => [team.teamId, team])
   );
-  const activeLiveTeams = liveTeams.filter(({ teamId }) => teamId !== 0);
-  const occupancyPercent =
-    server.maxSlots > 0
-      ? Math.min(100, Math.round((server.usedSlots / server.maxSlots) * 100))
-      : 0;
-  const ticketLeader = activeLiveTeams
-    .map(({ teamId }) => teamScoresById.get(teamId))
-    .filter((score) => score !== undefined)
-    .sort((left, right) => right.score - left.score)[0];
   const fullLeadersHref = `/servers/${server.serverId}/leaders?view=weekly`;
-  const currentMapImagePath = mapImagePath(server.mapName);
 
   return (
     <StatsShell
@@ -188,66 +175,13 @@ export default async function ServerHomePage({
       activeSection="home"
     >
       <RouteAutoRefresh intervalMs={30000} />
-      <section className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
-        <div className="relative aspect-[16/7] min-h-[142px] bg-slate-900 sm:aspect-[992/164] sm:min-h-[164px]">
-          {currentMapImagePath ? (
-            <Image
-              src={currentMapImagePath}
-              alt={formatMapName(server.mapName)}
-              fill
-              sizes="(min-width: 1120px) 1120px, 100vw"
-              className="object-cover opacity-90"
-              priority
-            />
-          ) : null}
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/82 via-slate-950/30 to-slate-950/58" />
-          <div className="absolute inset-0 flex min-w-0 flex-col justify-between p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <p className={ui.sectionTitle}>Current Round</p>
-              <span className="shrink-0 rounded-sm border border-slate-300/35 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 shadow-sm">
-                Refresh 30s
-              </span>
-            </div>
-            <div className="min-w-0 pr-10 sm:pr-24">
-              <h2 className="break-words text-2xl font-semibold leading-tight text-slate-50 drop-shadow sm:text-3xl">
-                {formatMapName(server.mapName)}
-              </h2>
-              <p className="mt-1 text-sm font-medium text-slate-200 drop-shadow">
-                {formatGamemodeName(server.gameMode)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="min-w-0 p-4 sm:p-5">
-          <dl className="grid overflow-hidden rounded-sm border border-slate-700/60 sm:grid-cols-2">
-            <div className="min-w-0 p-3 sm:p-4">
-              <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
-                Players
-              </dt>
-              <dd className="mt-2 text-lg font-semibold text-slate-100">
-                {server.usedSlots} / {server.maxSlots}
-              </dd>
-              <div className="mt-2 h-1.5 rounded-sm bg-slate-800">
-                <div
-                  className="h-full rounded-sm bg-teal-400/80"
-                  style={{ width: `${occupancyPercent}%` }}
-                />
-              </div>
-            </div>
-            <div className="min-w-0 border-t border-slate-700/60 p-3 sm:border-l sm:border-t-0 sm:p-4">
-              <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">
-                Ticket Lead
-              </dt>
-              <dd className="mt-2 text-lg font-semibold text-slate-100">
-                {ticketLeader
-                  ? `${liveTeamName(ticketLeader.teamId, server.gameMode)} · ${ticketLeader.score} tickets`
-                  : "N/A"}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </section>
+      <MapRotationCarousel
+        rotation={mapRotation}
+        currentMapCode={server.mapName}
+        currentGamemode={server.gameMode}
+        usedSlots={server.usedSlots}
+        maxSlots={server.maxSlots}
+      />
 
       <section className="mt-6 grid gap-6">
         <article className={ui.panel}>
