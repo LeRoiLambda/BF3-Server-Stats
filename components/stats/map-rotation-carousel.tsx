@@ -1,7 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode
+} from "react";
 import { clsx } from "clsx";
 import {
   formatGamemodeName,
@@ -225,6 +231,56 @@ function RotationStrip({
   selectedIndex: number;
   onSelect: (index: number) => void;
 }) {
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    const selectedButton = buttonRefs.current[selectedIndex];
+    selectedButton?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center"
+    });
+  }, [selectedIndex]);
+
+  const selectMap = (index: number, focus = false) => {
+    onSelect(index);
+
+    if (focus) {
+      window.requestAnimationFrame(() => {
+        buttonRefs.current[index]?.focus();
+      });
+    }
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLOListElement>) => {
+    if (entries.length <= 1) {
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      selectMap((selectedIndex + 1) % entries.length, true);
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      selectMap((selectedIndex - 1 + entries.length) % entries.length, true);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      selectMap(0, true);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      selectMap(entries.length - 1, true);
+    }
+  };
+
   if (entries.length === 0) {
     return null;
   }
@@ -237,7 +293,11 @@ function RotationStrip({
         </p>
         <p className="text-xs text-slate-400">{entries.length} maps</p>
       </div>
-      <ol className="mt-3 flex gap-2 overflow-x-auto px-4 pb-4 sm:px-5">
+      <ol
+        aria-label="Map rotation"
+        className="mt-3 flex gap-2 overflow-x-auto px-4 pb-4 sm:px-5"
+        onKeyDown={handleKeyDown}
+      >
         {entries.map((entry, index) => {
           const imagePath = mapImagePath(entry.mapCode);
           const isSelected = index === selectedIndex;
@@ -248,10 +308,14 @@ function RotationStrip({
               className="shrink-0"
             >
               <button
+                ref={(element) => {
+                  buttonRefs.current[index] = element;
+                }}
                 type="button"
                 aria-label={`Show ${formatMapName(entry.mapCode)}, map ${entry.mapIndex + 1} of ${entries.length}`}
+                aria-current={isLive ? "true" : undefined}
                 aria-pressed={isSelected}
-                onClick={() => onSelect(index)}
+                onClick={() => selectMap(index)}
                 className={clsx(
                   "group relative h-28 w-44 overflow-hidden rounded-sm border bg-slate-950 text-left transition-colors focus:outline-none focus:ring-1 focus:ring-slate-300/80",
                   rotationCardToneClass({
@@ -319,6 +383,11 @@ export function MapRotationCarousel({
     selectedIndex
   );
   const { current, entries, liveIndex } = context;
+  const liveEntry = liveIndex >= 0 ? entries[liveIndex] : null;
+  const liveKey = liveEntry
+    ? `${liveEntry.serverId}:${liveEntry.mapIndex}:${liveEntry.mapCode}:${liveEntry.gamemode}`
+    : null;
+  const previousLiveKeyRef = useRef(liveKey);
   const selectedIsLive = liveIndex >= 0 && context.selectedIndex === liveIndex;
   const selectedRotationEntry =
     context.selectedIndex >= 0 ? entries[context.selectedIndex] : null;
@@ -335,6 +404,15 @@ export function MapRotationCarousel({
       : null;
   const occupancyPercent =
     maxSlots > 0 ? Math.min(100, Math.round((usedSlots / maxSlots) * 100)) : 0;
+
+  useEffect(() => {
+    if (!liveKey || previousLiveKeyRef.current === liveKey) {
+      return;
+    }
+
+    previousLiveKeyRef.current = liveKey;
+    setSelectedIndex(liveIndex);
+  }, [liveIndex, liveKey]);
 
   return (
     <div className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
