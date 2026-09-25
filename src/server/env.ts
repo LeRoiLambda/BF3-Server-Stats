@@ -57,7 +57,6 @@ const envSchema = z.object({
   BF3_STATS_DB_NAME: z.string().min(1, "BF3_STATS_DB_NAME is required"),
   BF3_STATS_DB_USER: z.string().min(1, "BF3_STATS_DB_USER is required"),
   BF3_STATS_DB_PASS: z.string().min(1, "BF3_STATS_DB_PASS is required"),
-  BF3_STATS_CLAN_NAME: z.string().default("clan"),
   BF3_STATS_BANNER_IMAGE: z.preprocess(
     blankAsUnset,
     z.string()

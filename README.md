@@ -89,7 +89,6 @@ will cause startup or request failures.
 | `BF3_STATS_DB_NAME` | MySQL database name. |
 | `BF3_STATS_DB_USER` | MySQL user. |
 | `BF3_STATS_DB_PASS` | MySQL password. |
-| `BF3_STATS_CLAN_NAME` | Clan or community name. Parsed for runtime config. |
 | `BF3_STATS_BANNER_IMAGE` | Public image path for the header banner, for example `/images/bf3-logo.png`. |
 | `BF3_STATS_WEEK_TIME_ZONE` | IANA timezone used for weekly leaderboard reset calculations, for example `America/Los_Angeles`. |
 | `BF3_STATS_LOGGER_TIME_ZONE` | IANA timezone of the machine running Procon, for example `Europe/Paris` or `UTC`. The stats logger stamps rows with that machine's local time. |
