@@ -38,27 +38,42 @@ function normalizeBannerImagePath(value: string): string {
   return imagePath;
 }
 
+// Blank values (`NAME=`) count as unset, so optional variables get their
+// defaults.
+function blankAsUnset(value: unknown): unknown {
+  return typeof value === "string" && value.trim() === "" ? undefined : value;
+}
+
 const envSchema = z.object({
   BF3_STATS_DB_HOST: z.string().min(1, "BF3_STATS_DB_HOST is required"),
-  BF3_STATS_DB_PORT: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(3306),
+  BF3_STATS_DB_PORT: z.preprocess(
+    blankAsUnset,
+    z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3306)
+  ),
   BF3_STATS_DB_NAME: z.string().min(1, "BF3_STATS_DB_NAME is required"),
   BF3_STATS_DB_USER: z.string().min(1, "BF3_STATS_DB_USER is required"),
   BF3_STATS_DB_PASS: z.string().min(1, "BF3_STATS_DB_PASS is required"),
   BF3_STATS_CLAN_NAME: z.string().default("clan"),
-  BF3_STATS_BANNER_IMAGE: z.string()
-    .trim()
-    .min(1)
-    .default(DEFAULT_BANNER_IMAGE)
-    .transform(normalizeBannerImagePath),
-  BF3_STATS_WEEK_TIME_ZONE: z.string()
-    .trim()
-    .min(1)
-    .refine(isValidTimeZone, "BF3_STATS_WEEK_TIME_ZONE must be a valid IANA time zone")
-    .default(DEFAULT_WEEK_TIME_ZONE)
+  BF3_STATS_BANNER_IMAGE: z.preprocess(
+    blankAsUnset,
+    z.string()
+      .trim()
+      .min(1)
+      .default(DEFAULT_BANNER_IMAGE)
+      .transform(normalizeBannerImagePath)
+  ),
+  BF3_STATS_WEEK_TIME_ZONE: z.preprocess(
+    blankAsUnset,
+    z.string()
+      .trim()
+      .min(1)
+      .refine(isValidTimeZone, "BF3_STATS_WEEK_TIME_ZONE must be a valid IANA time zone")
+      .default(DEFAULT_WEEK_TIME_ZONE)
+  )
 });
 
 export type RuntimeEnv = z.infer<typeof envSchema>;
