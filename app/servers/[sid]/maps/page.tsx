@@ -7,8 +7,6 @@ import { getServerMapsSnapshot } from "@/src/server/repositories/maps-repository
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type MapsPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;

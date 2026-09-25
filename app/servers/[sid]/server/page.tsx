@@ -11,8 +11,6 @@ import {
 } from "@/src/server/repositories/server-details-repository";
 import { parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type ServerInfoPageProps = {
   params: Promise<{ sid: string }>;
 };

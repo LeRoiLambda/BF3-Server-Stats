@@ -23,8 +23,6 @@ import {
 } from "@/src/server/repositories/player-stats-repository";
 import { listTeamScores } from "@/src/server/repositories/server-overview-repository";
 
-export const revalidate = 30;
-
 type ServerHomePageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;

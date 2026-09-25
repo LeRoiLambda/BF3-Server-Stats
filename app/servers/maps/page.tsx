@@ -10,8 +10,6 @@ import {
   getAllServersPageScope
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersMapsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };

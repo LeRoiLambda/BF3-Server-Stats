@@ -27,8 +27,6 @@ import {
   nextOrder
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersLeadersPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };

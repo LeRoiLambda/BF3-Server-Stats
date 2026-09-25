@@ -9,8 +9,6 @@ import {
 } from "@/src/server/repositories/server-details-repository";
 import { getAllServersPageScope } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 export default async function AllServersServerInfoPage() {
   const scope = await getAllServersPageScope("server");
   const [stats, recentRounds, dailyTrend] = await Promise.all([

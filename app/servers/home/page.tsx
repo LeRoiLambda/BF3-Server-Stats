@@ -15,8 +15,6 @@ import {
 import { isServerOnline } from "@/src/server/repositories/server-repository";
 import { getAllServersPageScope } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 function occupancyPercent(usedSlots: number, maxSlots: number): number {
   if (maxSlots <= 0) {
     return 0;

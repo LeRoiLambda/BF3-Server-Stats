@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+// Pages show live database data: they render on every request, and the build
+// never connects to the database.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "BF3 Server Stats",
   description: "Track live Battlefield 3 server activity, players, maps, and rankings."

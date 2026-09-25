@@ -23,8 +23,6 @@ import {
   nextOrder
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersBansPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };

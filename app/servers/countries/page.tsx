@@ -19,8 +19,6 @@ import {
   getAllServersPageScope
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersCountriesPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
