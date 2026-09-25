@@ -1,10 +1,31 @@
 import Image from "next/image";
+import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 
 export default async function NotFound() {
   const context = await getLegacyServerContext();
+
+  // With no active servers every stats page 404s; /servers explains why.
+  if (context.servers.length === 0) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-16 sm:px-8">
+        <section className="stats-panel rounded-sm p-6">
+          <p className={ui.sectionTitle}>404</p>
+          <h1 className="mt-3 text-2xl font-semibold leading-tight text-slate-50">
+            Nothing to show here.
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            No active BF3 servers are tracked right now.
+          </p>
+          <Link href="/servers" className={`mt-5 ${ui.buttonGhost}`}>
+            Server status
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <StatsShell
