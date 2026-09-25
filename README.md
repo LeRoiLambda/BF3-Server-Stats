@@ -158,6 +158,7 @@ node scripts/smoke-test.mjs http://localhost:3000
 app/                         Next.js pages and API routes
 components/                  Shared React components
 components/layout/           Shell, navigation, and UI class helpers
+components/sections/         Section pages shared by the all-servers and per-server routes
 components/search/           Player autocomplete and search widgets
 components/stats/            Stats tables, badges, charts, and profile sections
 src/server/db/               MySQL pool, health check, and table availability checks

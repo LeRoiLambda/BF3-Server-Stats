@@ -8,6 +8,7 @@ import {
   type ServerSection,
 } from "@/src/server/routing/sections";
 import { readEnv } from "@/src/server/env";
+import { allServersHref, serverSectionHref } from "@/src/server/routing/server-pages";
 import type { ActiveServer } from "@/src/server/repositories/server-repository";
 
 type ScopeOption = {
@@ -26,18 +27,6 @@ type StatsShellProps = Readonly<{
   titleAction?: React.ReactNode;
   children: React.ReactNode;
 }>;
-
-function sectionHref(serverId: number, section: ServerSection): string {
-  if (section === "home") {
-    return `/servers/${serverId}`;
-  }
-
-  return `/servers/${serverId}/${section}`;
-}
-
-function allServersSectionHref(section: ServerSection): string {
-  return `/servers/${section}`;
-}
 
 function battlelogServerSearchHref(serverName: string): string {
   const params = new URLSearchParams({
@@ -70,18 +59,18 @@ export function StatsShell({
     ? battlelogServerSearchHref(currentServer.serverName)
     : null;
   const scopeSection = activeSection;
-  const allServersHref = allServersSectionHref(scopeSection);
+  const allServersScopeHref = allServersHref(scopeSection);
   const selectedScopeHref = hasServerScope
-    ? sectionHref(currentServerId, scopeSection)
-    : allServersHref;
+    ? serverSectionHref(currentServerId, scopeSection)
+    : allServersScopeHref;
   const defaultScopeOptions = [
     ...servers.map((server) => ({
       label: server.serverName,
-      href: sectionHref(server.serverId, scopeSection),
+      href: serverSectionHref(server.serverId, scopeSection),
     })),
     {
       label: "All Servers",
-      href: allServersHref,
+      href: allServersScopeHref,
     },
   ];
   const effectiveScopeOptions = scopeOptions ?? defaultScopeOptions;
@@ -100,8 +89,8 @@ export function StatsShell({
               <Link
                 href={
                   hasServerScope
-                    ? sectionHref(currentServerId, "home")
-                    : allServersSectionHref("home")
+                    ? serverSectionHref(currentServerId, "home")
+                    : allServersHref("home")
                 }
                 className="inline-flex"
               >
@@ -159,8 +148,8 @@ export function StatsShell({
               <Link
                 href={
                   hasServerScope
-                    ? sectionHref(currentServerId, "home")
-                    : allServersSectionHref("home")
+                    ? serverSectionHref(currentServerId, "home")
+                    : allServersHref("home")
                 }
                 className={navButtonClass(activeSection === "home")}
               >
@@ -168,8 +157,8 @@ export function StatsShell({
               </Link>
               {SERVER_NAV_SECTIONS.map((section) => {
                 const href = hasServerScope
-                  ? sectionHref(currentServerId, section)
-                  : allServersSectionHref(section);
+                  ? serverSectionHref(currentServerId, section)
+                  : allServersHref(section);
 
                 return (
                   <Link
