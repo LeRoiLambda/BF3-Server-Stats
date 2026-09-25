@@ -103,6 +103,7 @@ npm run build
 npm run start
 npm run lint
 npm run typecheck
+npm run test
 ```
 
 - `dev` starts the Next.js development server.
@@ -110,6 +111,7 @@ npm run typecheck
 - `start` serves the standalone build.
 - `lint` runs ESLint.
 - `typecheck` runs TypeScript without emitting files.
+- `test` runs the unit tests in `tests/` with Vitest.
 
 ## Main Routes
 
@@ -154,6 +156,7 @@ src/server/utils/            Date and number formatting helpers
 public/images/               BF3 images, maps, ranks, weapons, and flags
 sample-db/                   Sample database: logger and AdKats tables and data
 scripts/                     Build and start helpers for the standalone server
+tests/                       Unit tests
 ```
 
 ## Database Notes
