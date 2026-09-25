@@ -105,8 +105,8 @@ npm run typecheck
 ```
 
 - `dev` starts the Next.js development server.
-- `build` creates a production build.
-- `start` serves the production build.
+- `build` creates the production build and its standalone server bundle.
+- `start` serves the standalone build.
 - `lint` runs ESLint.
 - `typecheck` runs TypeScript without emitting files.
 
@@ -190,52 +190,34 @@ unavailable states when those tables are missing.
 
 ## Deployment
 
-Build and run the production app:
+`npm run build` produces a self-contained server in `.next/standalone`: the
+compiled app, `server.js`, the `node_modules` it needs, `public/` and the
+static assets. It runs with Node.js alone:
 
 ```sh
 npm run build
 npm run start
 ```
 
-The production environment must define the same environment variables and must
-be able to connect to the MySQL database.
+`npm run start` loads the same `.env` files as `next start`
+(`.env.production.local`, `.env.local`, `.env.production` and `.env`), then
+starts `.next/standalone/server.js`. The server listens on `PORT` (default
+`3000`) and `HOSTNAME` (default `0.0.0.0`).
 
-### Custom Server Startup
+### Node.js hosts and Passenger
 
-This repository uses `server.js` as its Node startup file. It is a custom Next.js
-server: it prepares the Next app and passes every request to Next's request
-handler.
+To run the app without the repository, copy the contents of
+`.next/standalone` to the host and start `node server.js`. On hosts that ask
+for an application startup file (Passenger, cPanel), set it to `server.js`,
+then restart the application from the control panel or by touching
+`tmp/restart.txt`.
 
-For hosts that ask for an application startup file, configure it to `server.js`.
+Set the environment variables through the host, or in a `.env.production`
+file next to `server.js`, which the server loads at startup.
 
-The server listens on `process.env.PORT` when the host provides one, and falls
-back to `3000` for local/manual runs.
-
-On memory-constrained hosts, building directly on the remote server may fail. In
-that case, build locally, archive the build output and runtime files, upload
-them, then extract them on the remote host. The remote host still needs
-production dependencies and the correct environment variables.
-
-Typical files to upload after a local build:
-
-```text
-.next/
-public/
-package.json
-package-lock.json
-next.config.ts
-server.js
-```
-
-Then install production dependencies on the remote host and start the app:
-
-```sh
-npm ci --omit=dev
-npm run start
-```
-
-If your host uses Passenger, restart the application through the host control
-panel or by touching the Passenger restart file, usually `tmp/restart.txt`.
+The bundle includes platform-specific binaries (`sharp`, which optimizes
+images), so build it on the host's operating system and CPU architecture:
+Linux x64 for most hosts.
 
 ## Troubleshooting
 
