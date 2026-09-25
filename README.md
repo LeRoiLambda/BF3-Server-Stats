@@ -204,6 +204,18 @@ npm run start
 starts `.next/standalone/server.js`. The server listens on `PORT` (default
 `3000`) and `HOSTNAME` (default `0.0.0.0`).
 
+### Docker
+
+The `Dockerfile` builds an image that runs the standalone server as the
+unprivileged `node` user on port 3000, with a health check on `/api/health`:
+
+```sh
+docker build -t bf3-server-stats .
+docker run -p 3000:3000 --env-file .env.production bf3-server-stats
+```
+
+`--env-file` takes plain `NAME=value` lines, as in `.env.example`.
+
 ### Node.js hosts and Passenger
 
 To run the app without the repository, copy the contents of
@@ -216,8 +228,13 @@ Set the environment variables through the host, or in a `.env.production`
 file next to `server.js`, which the server loads at startup.
 
 The bundle includes platform-specific binaries (`sharp`, which optimizes
-images), so build it on the host's operating system and CPU architecture:
-Linux x64 for most hosts.
+images), so build it for the host's operating system and CPU architecture:
+Linux x64 for most hosts. Docker can build it for Linux x64 on any machine
+and write it to `dist/`:
+
+```sh
+docker build --platform linux/amd64 --target bundle --output dist .
+```
 
 ## Troubleshooting
 
