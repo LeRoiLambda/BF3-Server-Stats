@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { containsPattern, searchableText } from "@/src/server/db/search";
 import { readEnv } from "@/src/server/env";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 
@@ -370,8 +371,8 @@ export async function getServerLeaderboard(
   `;
 
   if (search) {
-    countSql += " AND tpd.SoldierName LIKE ? ";
-    countParams.push(`%${search}%`);
+    countSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
+    countParams.push(containsPattern(search));
   }
 
   const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
@@ -403,8 +404,8 @@ export async function getServerLeaderboard(
   `;
 
   if (search) {
-    leaderSql += " AND tpd.SoldierName LIKE ? ";
-    leaderParams.push(`%${search}%`);
+    leaderSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
+    leaderParams.push(containsPattern(search));
   }
 
   leaderSql += `
@@ -466,8 +467,8 @@ export async function getAllServersLeaderboard(
   `;
 
   if (search) {
-    countSql += " AND tpd.SoldierName LIKE ? ";
-    countParams.push(`%${search}%`);
+    countSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
+    countParams.push(containsPattern(search));
   }
 
   const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
@@ -501,8 +502,8 @@ export async function getAllServersLeaderboard(
   `;
 
   if (search) {
-    leaderSql += " AND tpd.SoldierName LIKE ? ";
-    leaderParams.push(`%${search}%`);
+    leaderSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
+    leaderParams.push(containsPattern(search));
   }
 
   leaderSql += `

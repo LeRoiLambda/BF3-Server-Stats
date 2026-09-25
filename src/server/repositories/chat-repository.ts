@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { containsPattern, searchableText } from "@/src/server/db/search";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toDateTimeString } from "@/src/server/utils/dates";
 
@@ -263,16 +264,17 @@ export async function searchChatSuggestions(
     );
   }
 
+  const pattern = containsPattern(query);
   const playerParams: Array<string | number> = [
     input.gameId,
     ...scope.params,
-    `%${query}%`,
+    pattern,
     safeLimit
   ];
   const messageParams: Array<string | number> = [
     input.gameId,
     ...scope.params,
-    `%${query}%`,
+    pattern,
     safeLimit
   ];
 
@@ -285,7 +287,7 @@ export async function searchChatSuggestions(
         FROM tbl_chatlog cl
         INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
         WHERE ${scope.sql}
-          AND cl.logSoldierName LIKE ?
+          AND ${searchableText("cl.logSoldierName")} LIKE ?
         GROUP BY cl.logSoldierName
         ORDER BY MAX(cl.logDate) DESC, cl.logSoldierName ASC
         LIMIT ?
@@ -301,7 +303,7 @@ export async function searchChatSuggestions(
         INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
         WHERE ${scope.sql}
           AND TRIM(cl.logMessage) != ''
-          AND cl.logMessage LIKE ?
+          AND ${searchableText("cl.logMessage")} LIKE ?
         GROUP BY TRIM(cl.logMessage)
         ORDER BY MAX(cl.logDate) DESC
         LIMIT ?
@@ -386,12 +388,12 @@ export async function getServerChatLog(
   } else if (query) {
     pageSql += `
       AND (
-        cl.logSoldierName LIKE ?
-        OR cl.logMessage LIKE ?
+        ${searchableText("cl.logSoldierName")} LIKE ?
+        OR ${searchableText("cl.logMessage")} LIKE ?
         OR cl.logDate LIKE ?
       )
     `;
-    const pattern = `%${query}%`;
+    const pattern = containsPattern(query);
     pageParams.push(pattern, pattern, pattern);
   }
 

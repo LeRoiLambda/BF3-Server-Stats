@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { containsPattern, searchableText } from "@/src/server/db/search";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 import { toDateTimeString } from "@/src/server/utils/dates";
 
@@ -604,8 +605,11 @@ export async function searchPlayersByName(
   const pool = getDbPool();
   const adkatsAvailable = await hasTable("adkats_bans");
 
-  const whereParts = ["tpd.GameID = ?", "tpd.SoldierName LIKE ?"];
-  const params: Array<number | string> = [input.gameId, `%${query}%`];
+  const whereParts = [
+    "tpd.GameID = ?",
+    `${searchableText("tpd.SoldierName")} LIKE ?`
+  ];
+  const params: Array<number | string> = [input.gameId, containsPattern(query)];
 
   if (input.serverId !== null) {
     whereParts.push("tsp.ServerID = ?");
