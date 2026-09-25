@@ -72,7 +72,7 @@ type ServerRoundSnapshotRow = RowDataPacket & {
 };
 
 type ServerDailyPlayersSnapshotRow = RowDataPacket & {
-  dateValue: string | Date | null;
+  dateValue: string | null;
   averagePlayers: number | null;
   peakPlayers: number | null;
   roundCount: number | null;
@@ -215,10 +215,7 @@ export async function listServerDailyPlayerTrend(
   );
 
   return rows.map((row) => ({
-    date:
-      row.dateValue instanceof Date
-        ? row.dateValue.toISOString().slice(0, 10)
-        : String(row.dateValue ?? ""),
+    date: row.dateValue ?? "",
     averagePlayers: toFixedNumber(row.averagePlayers),
     peakPlayers: Number(row.peakPlayers ?? 0),
     roundCount: Number(row.roundCount ?? 0)

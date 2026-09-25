@@ -1,7 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
-import { toDateTimeString } from "@/src/server/utils/dates";
+import { parseUtcDateTime, toDateTimeString } from "@/src/server/utils/dates";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
 export type ModerationBanDuration = "permanent" | "temporary" | null;
@@ -260,15 +260,6 @@ function activeBanLabel(duration: ModerationBanDuration): string {
   return "Active ban";
 }
 
-function toDate(value: string | Date | null | undefined): Date | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function parseBoolean(value: string | null | undefined, defaultValue: boolean): boolean {
   if (value === null || value === undefined) {
     return defaultValue;
@@ -412,7 +403,8 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
   }
 
   const durationMinutes = Number(row.commandNumeric ?? 0);
-  const startedAt = toDate(row.recordTime);
+  // AdKats writes record_time in UTC.
+  const startedAt = parseUtcDateTime(row.recordTime);
   if (!startedAt || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     return DEFAULT_MUTE_STATUS;
   }
