@@ -72,7 +72,7 @@ type CountRow = RowDataPacket & {
 };
 
 type CurrentPlayerRow = RowDataPacket & {
-  playerId: number;
+  playerId: number | null;
   soldierName: string;
   score: number;
   kills: number;
@@ -84,7 +84,7 @@ type CurrentPlayerRow = RowDataPacket & {
 };
 
 export type CurrentPlayer = {
-  playerId: number;
+  playerId: number | null;
   soldierName: string;
   score: number;
   kills: number;
@@ -743,6 +743,8 @@ export async function listCurrentPlayersByServer(input: {
   const orderSql = order.toUpperCase();
   const adkatsAvailable = await hasAdkatsBansTable();
 
+  // Players new to this server have no player or stats rows until the next map
+  // load.
   const [rows] = await pool.query<CurrentPlayerRow[]>(
     `
       SELECT
@@ -756,7 +758,7 @@ export async function listCurrentPlayersByServer(input: {
         cp.CountryCode AS countryCode
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_currentplayers cp
-      INNER JOIN (
+      LEFT JOIN (
         SELECT
           MIN(tpd.PlayerID) AS playerId,
           tpd.SoldierName AS soldierName
@@ -775,7 +777,7 @@ export async function listCurrentPlayersByServer(input: {
   );
 
   return rows.map((row) => ({
-    playerId: Number(row.playerId),
+    playerId: row.playerId === null ? null : Number(row.playerId),
     soldierName: row.soldierName,
     score: Number(row.score ?? 0),
     kills: Number(row.kills ?? 0),

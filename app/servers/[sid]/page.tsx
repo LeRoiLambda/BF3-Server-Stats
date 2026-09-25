@@ -269,7 +269,10 @@ export default async function ServerHomePage({
                             players.map((player, index) => (
                               <tr
                                 key={`${teamId}-${player.soldierName}`}
-                                className={playerTableRowClass(ui.tableRow)}
+                                className={playerTableRowClass(
+                                  ui.tableRow,
+                                  player.playerId !== null
+                                )}
                               >
                                 <td className={ui.td}>
                                   <PlayerTableCellLink
