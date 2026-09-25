@@ -13,7 +13,7 @@ import {
   playerTableRowClass
 } from "@/components/stats/player-link";
 import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import {
   getWeeklyServerLeaderboard,
   getServerLeaderboard,
@@ -101,7 +101,7 @@ export default async function LeadersPage({
   const page = parseLeaderboardPage(firstValue(resolvedSearchParams.page));
   const search = firstValue(resolvedSearchParams.q)?.trim() || null;
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

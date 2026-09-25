@@ -23,10 +23,9 @@ type ActiveServerRow = RowDataPacket & {
   connectionState: string | null;
 };
 
-export type LegacyServerContext = {
+export type ServerContext = {
   gameId: number | null;
   servers: ActiveServer[];
-  validIdsCsv: string;
 };
 
 export async function listActiveServers(): Promise<ActiveServer[]> {
@@ -72,15 +71,12 @@ export function isServerOnline(server: Pick<ActiveServer, "connectionState">): b
   );
 }
 
-export async function getLegacyServerContext(): Promise<LegacyServerContext> {
+export async function getServerContext(): Promise<ServerContext> {
   const servers = await listActiveServers();
-  const gameId = servers[0]?.gameId ?? null;
-  const validIdsCsv = servers.map((server) => server.serverId).join(",");
 
   return {
-    gameId,
-    servers,
-    validIdsCsv
+    gameId: servers[0]?.gameId ?? null,
+    servers
   };
 }
 

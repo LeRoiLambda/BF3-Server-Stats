@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { pingDatabase } from "@/src/server/db/health";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 
 export async function GET() {
   try {
     const dbUp = await pingDatabase();
-    const context = await getLegacyServerContext();
+    const context = await getServerContext();
 
     return NextResponse.json({
       status: "ok",
       database: dbUp ? "up" : "unknown",
       gameId: context.gameId,
       activeServers: context.servers.length,
-      validIds: context.validIdsCsv,
+      validIds: context.servers.map((server) => server.serverId).join(","),
       checkedAt: new Date().toISOString()
     });
   } catch (error) {

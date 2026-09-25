@@ -3,7 +3,7 @@ import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
 import { DailyPlayerTrendChart } from "@/components/stats/daily-player-trend-chart";
 import { formatGamemodeName, formatMapName } from "@/src/server/domain/bf3-reference";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import {
   getServerDetailStats,
   listRecentServerRounds,
@@ -22,7 +22,7 @@ export default async function ServerInfoPage({ params }: ServerInfoPageProps) {
     notFound();
   }
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

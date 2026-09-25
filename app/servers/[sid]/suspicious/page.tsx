@@ -8,7 +8,7 @@ import {
   PlayerTableCellLink,
   playerTableRowClass
 } from "@/components/stats/player-link";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import {
   getSuspiciousPlayers,
   parseSuspiciousPage,
@@ -73,7 +73,7 @@ export default async function SuspiciousPage({
   const order = parseSuspiciousOrder(firstValue(resolvedSearchParams.order));
   const page = parseSuspiciousPage(firstValue(resolvedSearchParams.page));
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

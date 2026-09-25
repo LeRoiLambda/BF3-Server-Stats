@@ -8,7 +8,7 @@ import {
   PlayerTableCellLink,
   playerTableRowClass
 } from "@/components/stats/player-link";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import { getModerationPolicy } from "@/src/server/repositories/moderation-repository";
 import {
   getBannedPlayers,
@@ -67,7 +67,7 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
   const order = parseBanOrder(firstValue(resolvedSearchParams.order));
   const page = parseBanPage(firstValue(resolvedSearchParams.page));
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchChatSuggestions } from "@/src/server/repositories/chat-repository";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 
 export const revalidate = 0;
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ suggestions: [] });
   }
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   if (!context.gameId || context.servers.length === 0) {
     return NextResponse.json({ suggestions: [] });
   }
