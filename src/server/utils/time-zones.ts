@@ -37,27 +37,20 @@ export function wallClockInTimeZone(date: Date, timeZone: string): WallClock {
 }
 
 // Finds the instant at which the given wall-clock time occurs in `timeZone`.
+// The second pass corrects the offset when a daylight saving change falls
+// between the first guess and the instant.
 export function wallClockToInstant(wallClock: WallClock, timeZone: string): Date {
-  const utcGuess = new Date(Date.UTC(
-    wallClock.year,
-    wallClock.month - 1,
-    wallClock.day,
-    wallClock.hour,
-    wallClock.minute,
-    wallClock.second
-  ));
-  const guessedParts = wallClockInTimeZone(utcGuess, timeZone);
-  const guessedLocalAsUtc = Date.UTC(
-    guessedParts.year,
-    guessedParts.month - 1,
-    guessedParts.day,
-    guessedParts.hour,
-    guessedParts.minute,
-    guessedParts.second
-  );
-  const timeZoneOffset = guessedLocalAsUtc - utcGuess.getTime();
+  const wallTime = wallClockToNaiveDate(wallClock).getTime();
+  let instant = wallTime;
 
-  return new Date(utcGuess.getTime() - timeZoneOffset);
+  for (let pass = 0; pass < 2; pass += 1) {
+    const offset =
+      wallClockToNaiveDate(wallClockInTimeZone(new Date(instant), timeZone)).getTime() -
+      instant;
+    instant = wallTime - offset;
+  }
+
+  return new Date(instant);
 }
 
 // Calendar arithmetic on wall-clock values without any time zone: the value is

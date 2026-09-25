@@ -42,4 +42,27 @@ describe("wallClockToInstant", () => {
       "2026-11-02T08:00:00.000Z"
     );
   });
+
+  it("finds times on the day of a daylight saving change", () => {
+    const at = (month: number, day: number, hour: number, minute: number) => ({
+      year: 2026,
+      month,
+      day,
+      hour,
+      minute,
+      second: 0
+    });
+
+    // Los Angeles moves to PDT at 10:00 UTC on 8 March.
+    expect(wallClockToInstant(at(3, 8, 3, 30), "America/Los_Angeles").toISOString()).toBe(
+      "2026-03-08T10:30:00.000Z"
+    );
+    // Paris moves to CEST at 01:00 UTC on 29 March.
+    expect(wallClockToInstant(at(3, 29, 1, 30), "Europe/Paris").toISOString()).toBe(
+      "2026-03-29T00:30:00.000Z"
+    );
+    expect(wallClockToInstant(at(3, 29, 3, 30), "Europe/Paris").toISOString()).toBe(
+      "2026-03-29T01:30:00.000Z"
+    );
+  });
 });
