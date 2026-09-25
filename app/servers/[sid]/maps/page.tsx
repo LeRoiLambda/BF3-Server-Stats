@@ -20,11 +20,6 @@ function parseSelectedGamemode(
     return mode.trim();
   }
 
-  const legacyMode = firstValue(searchParams.c);
-  if (legacyMode?.trim()) {
-    return legacyMode.trim();
-  }
-
   return null;
 }
 

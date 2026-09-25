@@ -7,10 +7,7 @@ const config = tseslint.config(
   {
     ignores: [
       "node_modules/**",
-      ".next/**",
-      "common/**",
-      "config/**",
-      "*.php"
+      ".next/**"
     ]
   },
   js.configs.recommended,
