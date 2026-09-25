@@ -1,5 +1,6 @@
 import { clsx } from "clsx";
 import { ui } from "@/components/layout/stats-ui";
+import { DateTime } from "@/components/stats/date-time";
 import type {
   ModerationAction,
   ModerationSeverity,
@@ -9,10 +10,6 @@ import type {
 type PlayerModerationSectionProps = {
   summary: PlayerModerationSummary;
 };
-
-function compactDate(value: string | null): string {
-  return value ?? "Unknown date";
-}
 
 function formatPointSource(source: "global" | "server"): string {
   return source === "global" ? "Global" : "Server";
@@ -46,7 +43,11 @@ function ModerationTimeline({ actions }: { actions: ModerationAction[] }) {
     <ol className="divide-y divide-slate-800/80 rounded-sm border border-slate-700/45 bg-slate-950/35">
       {actions.map((action) => (
         <li key={action.recordId} className="grid gap-2 px-3 py-2 sm:grid-cols-[7.5rem_1fr]">
-          <time className="text-xs text-slate-400">{compactDate(action.occurredAt)}</time>
+          <DateTime
+            value={action.occurredAt}
+            fallback="Unknown date"
+            className="text-xs text-slate-400"
+          />
           <div className="flex min-w-0 gap-2">
             <span className={actionDotClass(action.severity)} aria-hidden="true" />
             <div className="min-w-0">
@@ -94,7 +95,12 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
               {summary.muteStatus.active ? (
                 <p className="mt-1 text-xs text-slate-400">
                   {summary.muteStatus.durationLabel ?? "Active"}
-                  {summary.muteStatus.endsAt ? ` - until ${summary.muteStatus.endsAt}` : ""}
+                  {summary.muteStatus.endsAt ? (
+                    <>
+                      {" - until "}
+                      <DateTime value={summary.muteStatus.endsAt} />
+                    </>
+                  ) : null}
                 </p>
               ) : null}
               {summary.muteStatus.active && summary.muteStatus.detail ? (

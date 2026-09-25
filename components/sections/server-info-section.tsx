@@ -1,6 +1,7 @@
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
 import { DailyPlayerTrendChart } from "@/components/stats/daily-player-trend-chart";
+import { DateTime } from "@/components/stats/date-time";
 import { formatGamemodeName, formatMapName } from "@/src/server/domain/bf3-reference";
 import {
   getServerDetailStats,
@@ -134,11 +135,11 @@ export async function ServerInfoSection({ scope }: ServerInfoSectionProps) {
               ) : (
                 recentRounds.map((round, index) => (
                   <tr
-                    key={`${round.serverId}-${round.startedAt ?? "unknown"}-${index}`}
+                    key={`${round.serverId}-${round.startedAt?.getTime() ?? "unknown"}-${index}`}
                     className={ui.tableRow}
                   >
                     <td className={`${ui.td} whitespace-nowrap`}>
-                      {round.startedAt ?? "Unknown"}
+                      <DateTime value={round.startedAt} />
                     </td>
                     {showServer ? (
                       <td className={`${ui.td} whitespace-nowrap text-slate-300`}>

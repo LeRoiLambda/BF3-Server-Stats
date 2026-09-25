@@ -2,7 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
-import { parseUtcDateTime, toDateTimeString } from "@/src/server/utils/dates";
+import { parseUtcDateTime } from "@/src/server/utils/time-zones";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
 export type ModerationBanDuration = "permanent" | "temporary" | null;
@@ -12,8 +12,8 @@ export type ModerationStatus = {
   kind: ModerationStatusKind;
   label: string;
   detail: string | null;
-  startedAt: string | null;
-  endsAt: string | null;
+  startedAt: Date | null;
+  endsAt: Date | null;
   banDuration: ModerationBanDuration;
 };
 
@@ -21,8 +21,8 @@ export type ModerationMuteStatus = {
   active: boolean;
   label: string;
   detail: string | null;
-  startedAt: string | null;
-  endsAt: string | null;
+  startedAt: Date | null;
+  endsAt: Date | null;
   durationLabel: string | null;
   muteDuration: ModerationMuteDuration;
 };
@@ -56,7 +56,7 @@ export type ModerationLadder = {
 export type ModerationAction = {
   recordId: number;
   serverId: number | null;
-  occurredAt: string | null;
+  occurredAt: Date | null;
   label: string;
   commandLabel: string;
   actionLabel: string;
@@ -107,8 +107,8 @@ type ModerationAvailability = {
 type BanRow = RowDataPacket & {
   banStatus: string | null;
   banNotes: string | null;
-  banStartTime: string | Date | null;
-  banEndTime: string | Date | null;
+  banStartTime: string | null;
+  banEndTime: string | null;
   commandType?: number | null;
   commandAction?: number | null;
   commandText?: string | null;
@@ -136,7 +136,7 @@ type RecordRow = RowDataPacket & {
   sourceId: number | null;
   sourceName: string | null;
   recordMessage: string | null;
-  recordTime: string | Date | null;
+  recordTime: string | null;
   typeCommandKey?: string | null;
   typeCommandText?: string | null;
   typeCommandName?: string | null;
@@ -220,15 +220,6 @@ const PERMANENT_MUTE_MINUTES = 10 * 365 * 24 * 60;
 function toFiniteNumber(value: unknown): number {
   const numberValue = Number(value ?? 0);
   return Number.isFinite(numberValue) ? numberValue : 0;
-}
-
-function cleanDateTime(value: unknown): string | null {
-  const formatted = toDateTimeString(value);
-  if (!formatted || formatted.startsWith("0000-00-00")) {
-    return null;
-  }
-
-  return formatted;
 }
 
 function banDurationFromRow(row: BanRow): ModerationBanDuration {
@@ -369,13 +360,14 @@ async function getCurrentStatus(
 
   const detail = row.recordMessage || row.banNotes || null;
   const banDuration = banDurationFromRow(row);
+  // AdKats writes ban times in UTC.
   if (row.banStatus === "Active") {
     return {
       kind: "activeBan",
       label: activeBanLabel(banDuration),
       detail,
-      startedAt: cleanDateTime(row.banStartTime),
-      endsAt: cleanDateTime(row.banEndTime),
+      startedAt: parseUtcDateTime(row.banStartTime),
+      endsAt: parseUtcDateTime(row.banEndTime),
       banDuration
     };
   }
@@ -385,8 +377,8 @@ async function getCurrentStatus(
       kind: "expiredBan",
       label: "Expired ban",
       detail,
-      startedAt: cleanDateTime(row.banStartTime),
-      endsAt: cleanDateTime(row.banEndTime),
+      startedAt: parseUtcDateTime(row.banStartTime),
+      endsAt: parseUtcDateTime(row.banEndTime),
       banDuration
     };
   }
@@ -424,7 +416,7 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
       active: true,
       label: "Permanent mute",
       detail: row.recordMessage || null,
-      startedAt: cleanDateTime(startedAt),
+      startedAt,
       endsAt: null,
       durationLabel: "Permanent",
       muteDuration: "permanent"
@@ -437,8 +429,8 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
     active: true,
     label: "Muted",
     detail: row.recordMessage || null,
-    startedAt: cleanDateTime(startedAt),
-    endsAt: cleanDateTime(endsAt),
+    startedAt,
+    endsAt,
     durationLabel: `${formatMinutes(remainingMinutes)} left`,
     muteDuration: "temporary"
   };
@@ -1038,7 +1030,7 @@ function formatRecordRow(row: RecordRow): ModerationAction {
   return {
     recordId: Number(row.recordId),
     serverId: row.serverId === null || row.serverId === undefined ? null : Number(row.serverId),
-    occurredAt: cleanDateTime(row.recordTime),
+    occurredAt: parseUtcDateTime(row.recordTime),
     label: labels.label,
     commandLabel: labels.commandLabel,
     actionLabel: labels.actionLabel,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   formatSqlDateTime,
+  parseSqlDateTime,
+  parseUtcDateTime,
   wallClockInTimeZone,
   wallClockToInstant
 } from "@/src/server/utils/time-zones";
@@ -64,5 +66,37 @@ describe("wallClockToInstant", () => {
     expect(wallClockToInstant(at(3, 29, 3, 30), "Europe/Paris").toISOString()).toBe(
       "2026-03-29T01:30:00.000Z"
     );
+  });
+});
+
+describe("parseSqlDateTime", () => {
+  it("reads a stored value", () => {
+    expect(parseSqlDateTime("2026-09-25 14:32:07")).toEqual({
+      year: 2026,
+      month: 9,
+      day: 25,
+      hour: 14,
+      minute: 32,
+      second: 7
+    });
+  });
+
+  it("returns null for zero, impossible, malformed and missing values", () => {
+    expect(parseSqlDateTime("0000-00-00 00:00:00")).toBeNull();
+    expect(parseSqlDateTime("2026-02-31 00:00:00")).toBeNull();
+    expect(parseSqlDateTime("yesterday")).toBeNull();
+    expect(parseSqlDateTime(null)).toBeNull();
+  });
+});
+
+describe("parseUtcDateTime", () => {
+  it("reads a stored value as UTC", () => {
+    expect(parseUtcDateTime("2026-09-25 14:32:07")?.toISOString()).toBe(
+      "2026-09-25T14:32:07.000Z"
+    );
+  });
+
+  it("returns null for zero values", () => {
+    expect(parseUtcDateTime("0000-00-00 00:00:00")).toBeNull();
   });
 });

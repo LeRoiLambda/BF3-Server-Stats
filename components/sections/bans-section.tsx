@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { DateTime } from "@/components/stats/date-time";
 import { ModerationPolicySection } from "@/components/stats/moderation-policy-section";
 import { StatsPager } from "@/components/stats/pager";
 import {
@@ -123,9 +124,9 @@ export async function BansSection({ scope, searchParams }: BansSectionProps) {
                             {(result.page - 1) * result.pageSize + index + 1}
                           </PlayerTableCellLink>
                         </td>
-                        <td className={ui.td}>
+                        <td className={`${ui.td} whitespace-nowrap`}>
                           <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
-                            {player.bannedAt ?? "Unknown"}
+                            <DateTime value={player.bannedAt} />
                           </PlayerTableCellLink>
                         </td>
                         <td className={ui.td}>

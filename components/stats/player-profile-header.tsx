@@ -1,6 +1,8 @@
 import Image from "next/image";
 import { clsx } from "clsx";
+import type { ReactNode } from "react";
 import { ui } from "@/components/layout/stats-ui";
+import { DateTime } from "@/components/stats/date-time";
 import {
   playerDisciplineBadgeClass,
   playerDisciplineLabel,
@@ -121,12 +123,12 @@ function detailsLabel(status: HeaderStatus): string {
   return status.banDuration === "permanent" ? "Ban Duration" : "Ban Ends";
 }
 
-function detailsValue(status: HeaderStatus): string {
+function detailsValue(status: HeaderStatus): ReactNode {
   if (status.kind === "activeBan" && status.banDuration === "permanent") {
     return "Permanent";
   }
 
-  return status.endsAt ?? "Unknown";
+  return <DateTime value={status.endsAt} />;
 }
 
 function badgeLabel(status: HeaderStatus): string {
@@ -358,7 +360,9 @@ export function PlayerProfileHeader({
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                 Ban Started
               </p>
-              <p className="mt-1 text-slate-200">{status.startedAt ?? "Unknown"}</p>
+              <p className="mt-1 text-slate-200">
+                <DateTime value={status.startedAt} />
+              </p>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -458,7 +462,9 @@ export function PlayerProfileHeader({
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                 Ban Started
               </p>
-              <p className="mt-1 text-slate-200">{status.startedAt ?? "Unknown"}</p>
+              <p className="mt-1 text-slate-200">
+                <DateTime value={status.startedAt} />
+              </p>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">

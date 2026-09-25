@@ -3,6 +3,7 @@ import { ChatAutoRefresh } from "@/components/chat/chat-auto-refresh";
 import { ChatSearchForm } from "@/components/chat/chat-search-form";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { DateTime } from "@/components/stats/date-time";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
 import {
@@ -98,7 +99,8 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
 
         {result.dateRange ? (
           <p className="mb-3 text-xs text-slate-300">
-            Date range: {result.dateRange.low} - {result.dateRange.high}
+            Date range: <DateTime value={result.dateRange.low} /> -{" "}
+            <DateTime value={result.dateRange.high} />
           </p>
         ) : null}
 
@@ -134,7 +136,7 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
                     </td>
                     <td className={`${ui.td} whitespace-nowrap`}>
                       <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        {entry.logDate}
+                        <DateTime value={entry.logDate} />
                       </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} whitespace-nowrap`}>

@@ -2,8 +2,8 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
-import { toDateTimeString } from "@/src/server/utils/dates";
 import { toFixedNumber } from "@/src/server/utils/numbers";
+import { parseUtcDateTime } from "@/src/server/utils/time-zones";
 
 export type BanSort = "date" | "soldierName" | "kdr" | "hsr";
 export type BanOrder = "asc" | "desc";
@@ -24,7 +24,7 @@ export type BannedPlayer = {
   countryCode: string | null;
   kdr: number;
   hsr: number;
-  bannedAt: string | null;
+  bannedAt: Date | null;
   reason: string | null;
 };
 
@@ -44,7 +44,7 @@ type BannedRow = RowDataPacket & {
   countryCode: string | null;
   kdr: number | null;
   hsr: number | null;
-  bannedAt?: string | Date | null;
+  bannedAt?: string | null;
   reason?: string | null;
 };
 
@@ -116,7 +116,8 @@ function toBannedPlayer(row: BannedRow): BannedPlayer {
     countryCode: row.countryCode,
     kdr: toFixedNumber(row.kdr),
     hsr: toFixedNumber(row.hsr),
-    bannedAt: toDateTimeString(row.bannedAt),
+    // AdKats writes ban times in UTC.
+    bannedAt: parseUtcDateTime(row.bannedAt),
     reason: row.reason ? row.reason : null
   };
 }
