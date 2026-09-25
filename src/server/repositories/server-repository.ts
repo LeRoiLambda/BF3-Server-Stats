@@ -63,6 +63,15 @@ export async function listActiveServers(): Promise<ActiveServer[]> {
   }));
 }
 
+// The stats logger never writes ConnectionState, so NULL counts as online, as
+// in listActiveServers().
+export function isServerOnline(server: Pick<ActiveServer, "connectionState">): boolean {
+  return (
+    server.connectionState === null ||
+    server.connectionState.trim().toLowerCase() === "on"
+  );
+}
+
 export async function getLegacyServerContext(): Promise<LegacyServerContext> {
   const servers = await listActiveServers();
   const gameId = servers[0]?.gameId ?? null;
