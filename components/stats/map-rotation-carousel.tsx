@@ -40,6 +40,7 @@ type RotationContext = {
   entries: MapRotationEntry[];
   liveIndex: number;
   selectedIndex: number;
+  showingLive: boolean;
 };
 
 function entryFromRotation(entry: MapRotationEntry): CarouselEntry {
@@ -70,63 +71,61 @@ function fallbackEntry(
   };
 }
 
+// The live map is the one tbl_server reports. AdKats' map_current flag can be
+// stale, so it only breaks ties between rows on that map, or applies when the
+// live map is unknown.
+function findLiveIndex(
+  entries: MapRotationEntry[],
+  currentMapCode: string | null,
+  currentGamemode: string | null
+): number {
+  if (!currentMapCode) {
+    return entries.findIndex((entry) => entry.isCurrent);
+  }
+
+  const matchingIndexes = entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(
+      ({ entry }) =>
+        entry.mapCode === currentMapCode && entry.gamemode === currentGamemode
+    );
+  const flaggedMatch = matchingIndexes.find(({ entry }) => entry.isCurrent);
+
+  return (flaggedMatch ?? matchingIndexes[0])?.index ?? -1;
+}
+
+// `selection` is a rotation index, or null for the live map.
 function buildRotationContext(
   rotation: MapRotationEntry[],
   currentMapCode: string | null,
   currentGamemode: string | null,
-  selectedIndex: number
+  selection: number | null
 ): RotationContext {
   const entries = rotation.slice().sort((left, right) => left.mapIndex - right.mapIndex);
-  const flaggedCurrentIndex = entries.findIndex((entry) => entry.isCurrent);
-  const matchingCurrentIndex = entries.findIndex(
-    (entry) => entry.mapCode === currentMapCode && entry.gamemode === currentGamemode
-  );
-  const currentIndex =
-    flaggedCurrentIndex >= 0
-      ? flaggedCurrentIndex
-      : matchingCurrentIndex >= 0
-        ? matchingCurrentIndex
-        : -1;
-  const resolvedSelectedIndex =
-    entries.length > 0
-      ? Math.min(Math.max(selectedIndex, 0), entries.length - 1)
-      : -1;
+  const liveIndex = findLiveIndex(entries, currentMapCode, currentGamemode);
+  const selectedIndex =
+    selection === null || entries.length === 0
+      ? liveIndex
+      : Math.min(Math.max(selection, 0), entries.length - 1);
+  const showingLive = selectedIndex === liveIndex;
 
-  if (entries.length === 0 || resolvedSelectedIndex < 0) {
+  if (selectedIndex < 0) {
     return {
       current: fallbackEntry(currentMapCode, currentGamemode),
       entries,
-      liveIndex: currentIndex,
-      selectedIndex: resolvedSelectedIndex
+      liveIndex,
+      selectedIndex,
+      showingLive
     };
   }
 
-  const current = entries[resolvedSelectedIndex];
-
   return {
-    current: entryFromRotation(current),
+    current: entryFromRotation(entries[selectedIndex]),
     entries,
-    liveIndex: currentIndex,
-    selectedIndex: resolvedSelectedIndex
+    liveIndex,
+    selectedIndex,
+    showingLive
   };
-}
-
-function initialRotationIndex(
-  rotation: MapRotationEntry[],
-  currentMapCode: string | null,
-  currentGamemode: string | null
-): number {
-  const entries = rotation.slice().sort((left, right) => left.mapIndex - right.mapIndex);
-  const flaggedCurrentIndex = entries.findIndex((entry) => entry.isCurrent);
-  if (flaggedCurrentIndex >= 0) {
-    return flaggedCurrentIndex;
-  }
-
-  const matchingCurrentIndex = entries.findIndex(
-    (entry) => entry.mapCode === currentMapCode && entry.gamemode === currentGamemode
-  );
-
-  return matchingCurrentIndex >= 0 ? matchingCurrentIndex : 0;
 }
 
 function MapBackdrop({
@@ -231,14 +230,23 @@ function RotationStrip({
   selectedIndex: number;
   onSelect: (index: number) => void;
 }) {
+  const listRef = useRef<HTMLOListElement | null>(null);
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
-    const selectedButton = buttonRefs.current[selectedIndex];
-    selectedButton?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "center"
+    const list = listRef.current;
+    const selectedButton = selectedIndex >= 0 ? buttonRefs.current[selectedIndex] : null;
+    if (!list || !selectedButton) {
+      return;
+    }
+
+    // Centers the card by scrolling only the strip, never the page.
+    const listRect = list.getBoundingClientRect();
+    const buttonRect = selectedButton.getBoundingClientRect();
+    list.scrollBy({
+      left:
+        buttonRect.left + buttonRect.width / 2 - (listRect.left + listRect.width / 2),
+      behavior: "smooth"
     });
   }, [selectedIndex]);
 
@@ -265,7 +273,7 @@ function RotationStrip({
 
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      selectMap((selectedIndex - 1 + entries.length) % entries.length, true);
+      selectMap(selectedIndex <= 0 ? entries.length - 1 : selectedIndex - 1, true);
       return;
     }
 
@@ -294,6 +302,7 @@ function RotationStrip({
         <p className="text-xs text-slate-400">{entries.length} maps</p>
       </div>
       <ol
+        ref={listRef}
         aria-label="Map rotation"
         className="mt-3 flex gap-2 overflow-x-auto px-4 pb-4 sm:px-5"
         onKeyDown={handleKeyDown}
@@ -373,24 +382,19 @@ export function MapRotationCarousel({
   maxSlots,
   refreshLabel = "Refresh 30s"
 }: MapRotationCarouselProps) {
-  const [selectedIndex, setSelectedIndex] = useState(() =>
-    initialRotationIndex(rotation, currentMapCode, currentGamemode)
-  );
+  const [selection, setSelection] = useState<number | null>(null);
   const context = buildRotationContext(
     rotation,
     currentMapCode,
     currentGamemode,
-    selectedIndex
+    selection
   );
   const { current, entries, liveIndex } = context;
-  const liveEntry = liveIndex >= 0 ? entries[liveIndex] : null;
-  const liveKey = liveEntry
-    ? `${liveEntry.serverId}:${liveEntry.mapIndex}:${liveEntry.mapCode}:${liveEntry.gamemode}`
-    : null;
+  const liveKey = `${currentMapCode ?? ""}:${currentGamemode ?? ""}:${liveIndex}`;
   const previousLiveKeyRef = useRef(liveKey);
-  const selectedIsLive = liveIndex >= 0 && context.selectedIndex === liveIndex;
+  const selectedIsLive = context.showingLive;
   const selectedRotationEntry =
-    context.selectedIndex >= 0 ? entries[context.selectedIndex] : null;
+    !selectedIsLive && context.selectedIndex >= 0 ? entries[context.selectedIndex] : null;
   const selectedIsNext = Boolean(selectedRotationEntry?.isNext);
   const headingLabel = selectedIsLive
     ? "Current Round"
@@ -406,13 +410,13 @@ export function MapRotationCarousel({
     maxSlots > 0 ? Math.min(100, Math.round((usedSlots / maxSlots) * 100)) : 0;
 
   useEffect(() => {
-    if (!liveKey || previousLiveKeyRef.current === liveKey) {
+    if (previousLiveKeyRef.current === liveKey) {
       return;
     }
 
     previousLiveKeyRef.current = liveKey;
-    setSelectedIndex(liveIndex);
-  }, [liveIndex, liveKey]);
+    setSelection(null);
+  }, [liveKey]);
 
   return (
     <div className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
@@ -450,6 +454,15 @@ export function MapRotationCarousel({
               ) : null}
             </div>
             <div className="flex max-w-full flex-wrap items-start justify-end gap-2">
+              {!selectedIsLive ? (
+                <button
+                  type="button"
+                  onClick={() => setSelection(null)}
+                  className="rounded-sm border border-teal-200/60 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-100 shadow-sm transition-colors hover:border-teal-100 hover:text-teal-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-teal-100/80"
+                >
+                  Show current round
+                </button>
+              ) : null}
               {detailText ? (
                 <span className="rounded-sm border border-slate-300/35 bg-slate-950/75 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 shadow-sm">
                   {detailText}
@@ -488,7 +501,7 @@ export function MapRotationCarousel({
         entries={entries}
         liveIndex={liveIndex}
         selectedIndex={context.selectedIndex}
-        onSelect={setSelectedIndex}
+        onSelect={setSelection}
       />
     </div>
   );
