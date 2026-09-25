@@ -92,6 +92,8 @@ will cause startup or request failures.
 | `BF3_STATS_CLAN_NAME` | Clan or community name. Parsed for runtime config. |
 | `BF3_STATS_BANNER_IMAGE` | Public image path for the header banner, for example `/images/bf3-logo.png`. |
 | `BF3_STATS_WEEK_TIME_ZONE` | IANA timezone used for weekly leaderboard reset calculations, for example `America/Los_Angeles`. |
+| `BF3_STATS_LOGGER_TIME_ZONE` | IANA timezone of the machine running Procon, for example `Europe/Paris` or `UTC`. The stats logger stamps rows with that machine's local time. |
+| `BF3_STATS_LOGGER_TIME_OFFSET` | The stats logger's "Servertime Offset" setting, in hours. Defaults to `0`. |
 
 ## Available Scripts
 
@@ -178,7 +180,9 @@ The app queries legacy BF3 stats tables including:
 
 Some features are optional and are enabled only when their tables exist:
 
-- `tbl_sessions` for weekly leaderboard history
+- `tbl_sessions` for weekly leaderboard history. The logger always creates this
+  table but only fills it when its "Session ON?" and "Save Sessiondata to DB?"
+  settings are enabled; weekly boards count sessions once the player has left.
 - `tbl_dogtags` for player dogtag sections
 - `adkats_bans` and other `adkats_*` tables for ban and moderation data
 
@@ -239,7 +243,11 @@ panel or by touching the Passenger restart file, usually `tmp/restart.txt`.
 - Use `/api/health` to confirm database connectivity and active-server context.
 - Use `/api/servers` to inspect which BF3 servers the app considers active.
 - Check `.env.local` when startup fails with an environment validation error.
-- Confirm `BF3_STATS_WEEK_TIME_ZONE` is a valid IANA timezone.
+- Confirm `BF3_STATS_WEEK_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_ZONE` are valid
+  IANA timezones.
+- If the weekly leaderboard or chat searches such as "today" are off by some
+  hours, check `BF3_STATS_LOGGER_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_OFFSET`
+  against the Procon host and the logger's settings.
 - If weekly leaderboards, dogtags, bans, or moderation sections are unavailable,
   check whether the optional tables exist in the database.
 - If images are missing, verify that the referenced files exist under

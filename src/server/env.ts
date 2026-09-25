@@ -73,6 +73,18 @@ const envSchema = z.object({
       .min(1)
       .refine(isValidTimeZone, "BF3_STATS_WEEK_TIME_ZONE must be a valid IANA time zone")
       .default(DEFAULT_WEEK_TIME_ZONE)
+  ),
+  BF3_STATS_LOGGER_TIME_ZONE: z.string()
+    .trim()
+    .min(1, "BF3_STATS_LOGGER_TIME_ZONE is required")
+    .refine(isValidTimeZone, "BF3_STATS_LOGGER_TIME_ZONE must be a valid IANA time zone"),
+  BF3_STATS_LOGGER_TIME_OFFSET: z.preprocess(
+    blankAsUnset,
+    z.coerce
+      .number()
+      .min(-24, "BF3_STATS_LOGGER_TIME_OFFSET must be between -24 and 24 hours")
+      .max(24, "BF3_STATS_LOGGER_TIME_OFFSET must be between -24 and 24 hours")
+      .default(0)
   )
 });
 
