@@ -15,3 +15,7 @@ export function escapeLikePattern(value: string): string {
 export function containsPattern(value: string): string {
   return `%${escapeLikePattern(value)}%`;
 }
+
+export function startsWithPattern(value: string): string {
+  return `${escapeLikePattern(value)}%`;
+}

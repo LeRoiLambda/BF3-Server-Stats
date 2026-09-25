@@ -1,7 +1,11 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
-import { containsPattern, searchableText } from "@/src/server/db/search";
+import {
+  containsPattern,
+  searchableText,
+  startsWithPattern
+} from "@/src/server/db/search";
 import {
   buildServerScopeCondition,
   type ServerScopeCondition
@@ -590,10 +594,11 @@ export async function searchPlayersByName(
   const params: Array<number | string> = [
     input.gameId,
     containsPattern(query),
-    ...scope.params
+    ...scope.params,
+    query,
+    startsWithPattern(query),
+    Math.max(1, Math.min(100, Math.floor(input.limit)))
   ];
-
-  params.push(Math.max(1, Math.min(100, Math.floor(input.limit))));
 
   const [rows] = await pool.query<PlayerSearchRow[]>(
     `
@@ -611,7 +616,11 @@ export async function searchPlayersByName(
       ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
       WHERE ${whereParts.join(" AND ")}
       GROUP BY tpd.PlayerID
-      ORDER BY score DESC, tpd.SoldierName ASC
+      ORDER BY
+        ${searchableText("tpd.SoldierName")} = ? DESC,
+        ${searchableText("tpd.SoldierName")} LIKE ? DESC,
+        score DESC,
+        tpd.SoldierName ASC
       LIMIT ?
     `,
     params
