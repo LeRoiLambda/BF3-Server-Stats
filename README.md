@@ -48,34 +48,35 @@ fork: https://github.com/leroilambda/adkats.
   stats/mapstats logger
 - Optional AdKats tables for bans, moderation records, and policy data
 - Network access from the app host to that database
+- Docker, optionally, for the sample database and the container image
 
-This repository does not include database migrations or seed data. It expects an
-existing BF3 stats database, typically populated by the legacy Procon
-stats/mapstats logger and extended by the AdKats fork.
+The app reads an existing BF3 stats database, filled by the Procon
+stats/mapstats logger and optionally extended by AdKats. It never writes to it.
+For development, `sample-db/` holds a small generated database (see
+[Sample Database](#sample-database)).
 
 ## Setup
 
-Install dependencies:
+Install dependencies and create a local environment file:
 
 ```sh
 npm install
-```
-
-Create a local environment file:
-
-```sh
 cp .env.example .env.local
 ```
 
-Edit `.env.local` so it points at the BF3 stats database.
-
-Start the development server:
+`.env.example` points at the sample database. Start it with Docker, then the
+development server:
 
 ```sh
+docker compose up -d db
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. To use another BF3 stats database, edit
+`.env.local`.
+
+`docker compose up --build` runs the whole stack in Docker instead, with a
+production build of the app on http://localhost:3000.
 
 ## Environment Variables
 
@@ -151,18 +152,21 @@ src/server/repositories/     Database query layer
 src/server/routing/          Route parameter and section helpers
 src/server/utils/            Date and number formatting helpers
 public/images/               BF3 images, maps, ranks, weapons, and flags
+sample-db/                   Sample database: logger and AdKats tables and data
+scripts/                     Build and start helpers for the standalone server
 ```
 
 ## Database Notes
 
-The expected database is a shared MySQL database used by two Procon plugins:
+The expected database is a MySQL database shared by two Procon plugins:
 
 - The BF3 stats/mapstats logger, which produces the core server, player, chat,
-  map, weapon, and current-player tables.
-- The LeRoiLambda AdKats fork, which adds bans, moderation records, settings,
-  and related player metadata: https://github.com/leroilambda/adkats.
+  map, weapon, and current-player tables. It is required.
+- AdKats, which adds bans, moderation records, settings, and related player
+  metadata. It is optional. The site is developed against the LeRoiLambda fork:
+  https://github.com/leroilambda/adkats.
 
-The app queries legacy BF3 stats tables including:
+The app reads these stats logger tables:
 
 - `tbl_games`
 - `tbl_server`
@@ -183,10 +187,42 @@ Some features are optional and are enabled only when their tables exist:
   table but only fills it when its "Session ON?" and "Save Sessiondata to DB?"
   settings are enabled; weekly boards count sessions once the player has left.
 - `tbl_dogtags` for player dogtag sections
-- `adkats_bans` and other `adkats_*` tables for ban and moderation data
+- `adkats_bans`, `adkats_records_main`, `adkats_commands`, `adkats_settings`
+  and the `adkats_infractions_*` tables for bans, moderation details, infraction
+  points and the punishment ladder. Upstream AdKats creates them too.
+- `adkats_maplist` for the map rotation carousel. Only the LeRoiLambda AdKats
+  fork creates it; without it the server page shows the live map alone.
+- `tbl_chatlog.logPlayerID`, which AdKats adds, to link chat lines to players.
+  Without it, chat speakers are matched to players by name.
 
 The repository layer checks optional table availability and returns empty or
 unavailable states when those tables are missing.
+
+## Sample Database
+
+`sample-db/` holds a small generated database in the logger's and AdKats'
+table layouts:
+
+- `01-logger-schema.sql` and `02-adkats-schema.sql` create the tables.
+- `03-logger-data.sql` and `04-adkats-data.sql` fill them with three servers
+  (one hidden with `ConnectionState` 'off'), about 260 players, recent rounds,
+  sessions and chat, and a few bans, mutes and punishments.
+
+Times are relative to when the files are loaded and written in UTC, so the
+live, weekly and moderation views have current data after each load; the site
+needs `BF3_STATS_LOGGER_TIME_ZONE=UTC` for them. Loading only the two logger
+files gives a database without AdKats.
+
+`docker compose up -d db` serves the sample database on port 3307. It lives in
+memory and is loaded again on every start. To load it into another MySQL or
+MariaDB server, create an empty database and run the files in order:
+
+```sh
+mysql -u root -p bf3_stats < sample-db/01-logger-schema.sql
+mysql -u root -p bf3_stats < sample-db/02-adkats-schema.sql
+mysql -u root -p bf3_stats < sample-db/03-logger-data.sql
+mysql -u root -p bf3_stats < sample-db/04-adkats-data.sql
+```
 
 ## Deployment
 

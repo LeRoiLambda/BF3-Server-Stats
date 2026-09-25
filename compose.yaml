@@ -1,0 +1,37 @@
+# Development stack: MariaDB loaded with the sample database from sample-db/,
+# and the app built from this repository. The database lives in memory and is
+# loaded again on every start, with dates relative to that start.
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: bf3_stats
+      MARIADB_USER: bf3
+      MARIADB_PASSWORD: bf3
+      MARIADB_INITDB_SKIP_TZINFO: "1"
+    ports:
+      - "3307:3306"
+    tmpfs:
+      - /var/lib/mysql
+    volumes:
+      - ./sample-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    environment:
+      BF3_STATS_DB_HOST: db
+      BF3_STATS_DB_NAME: bf3_stats
+      BF3_STATS_DB_USER: bf3
+      BF3_STATS_DB_PASS: bf3
+      BF3_STATS_LOGGER_TIME_ZONE: UTC
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
