@@ -117,7 +117,7 @@ export default async function AllServersCountriesPage({
                           </PlayerTableCellLink>
                         </td>
                         <td className={ui.td}>
-                          <PlayerTableCellLink playerId={player.playerId}>
+                          <PlayerTableCellLink playerId={player.playerId} primary>
                             <PlayerIdentity
                               soldierName={player.soldierName}
                               countryCode={player.countryCode}

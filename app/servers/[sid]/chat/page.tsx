@@ -191,6 +191,7 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                       <PlayerTableCellLink
                         playerId={entry.playerId}
                         serverId={server.serverId}
+                        primary
                       >
                         <PlayerIdentity
                           soldierName={entry.soldierName}

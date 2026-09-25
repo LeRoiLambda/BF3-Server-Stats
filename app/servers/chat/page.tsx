@@ -138,7 +138,7 @@ export default async function AllServersChatPage({
                       </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerTableCellLink playerId={entry.playerId}>
+                      <PlayerTableCellLink playerId={entry.playerId} primary>
                         <PlayerIdentity
                           soldierName={entry.soldierName}
                           countryCode={entry.countryCode}

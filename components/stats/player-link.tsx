@@ -19,6 +19,7 @@ type PlayerIdentityProps = Readonly<{
 type PlayerTableCellLinkProps = Readonly<{
   playerId: number | null;
   serverId?: number | null;
+  primary?: boolean;
   className?: string;
   children: ReactNode;
 }>;
@@ -55,9 +56,13 @@ export function PlayerIdentity({
   );
 }
 
+// Makes a whole table row link to the player's profile. The `primary` cell (the
+// player's name) holds the focusable link; the other cells get an overlay link
+// hidden from keyboard and screen-reader users, so each row is one tab stop.
 export function PlayerTableCellLink({
   playerId,
   serverId = null,
+  primary = false,
   className,
   children
 }: PlayerTableCellLinkProps) {
@@ -67,16 +72,36 @@ export function PlayerTableCellLink({
     return children;
   }
 
+  const href = playerHref(playerId, serverId);
+  const cellClassName = clsx(
+    "block -mx-3 -my-2 px-3 py-2 transition-colors group-hover/player-row:text-slate-50",
+    className
+  );
+
+  if (primary) {
+    return (
+      <Link
+        href={href}
+        className={clsx(
+          cellClassName,
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70"
+        )}
+      >
+        {children}
+      </Link>
+    );
+  }
+
   return (
-    <Link
-      href={playerHref(playerId, serverId)}
-      className={clsx(
-        "block -mx-3 -my-2 px-3 py-2 transition-colors group-hover/player-row:text-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70",
-        className
-      )}
-    >
+    <span className={clsx("relative", cellClassName)}>
       {children}
-    </Link>
+      <Link
+        href={href}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="absolute inset-0"
+      />
+    </span>
   );
 }
 

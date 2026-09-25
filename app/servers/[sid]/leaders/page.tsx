@@ -266,6 +266,7 @@ export default async function LeadersPage({
                         <PlayerTableCellLink
                           playerId={player.playerId}
                           serverId={server.serverId}
+                          primary
                         >
                           <PlayerIdentity
                             soldierName={player.soldierName}

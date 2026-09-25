@@ -164,6 +164,7 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
                           <PlayerTableCellLink
                             playerId={player.playerId}
                             serverId={server.serverId}
+                            primary
                           >
                             <PlayerIdentity
                               soldierName={player.soldierName}

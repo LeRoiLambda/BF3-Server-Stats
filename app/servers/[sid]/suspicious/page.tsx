@@ -149,6 +149,7 @@ export default async function SuspiciousPage({
                       <PlayerTableCellLink
                         playerId={player.playerId}
                         serverId={server.serverId}
+                        primary
                       >
                         <PlayerIdentity
                           soldierName={player.soldierName}

@@ -266,6 +266,7 @@ export function PlayerProfileSections({
                           <PlayerTableCellLink
                             playerId={entry.victimId}
                             serverId={serverId}
+                            primary
                           >
                             {entry.victimName}
                           </PlayerTableCellLink>
@@ -324,6 +325,7 @@ export function PlayerProfileSections({
                         <PlayerTableCellLink
                           playerId={entry.killerId}
                           serverId={serverId}
+                          primary
                         >
                           {entry.killerName}
                         </PlayerTableCellLink>
