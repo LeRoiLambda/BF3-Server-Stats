@@ -51,3 +51,34 @@ export async function hasTable(tableName: string): Promise<boolean> {
     return rows.length > 0;
   });
 }
+
+export async function hasColumn(
+  tableName: string,
+  columnName: string
+): Promise<boolean> {
+  const normalizedTable = tableName.trim();
+  const normalizedColumn = columnName.trim();
+  if (!normalizedTable || !normalizedColumn) {
+    return false;
+  }
+
+  return cachedSchemaFlag(
+    `column:${normalizedTable}.${normalizedColumn}`,
+    async () => {
+      const pool = getDbPool();
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `
+          SELECT COLUMN_NAME
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND COLUMN_NAME = ?
+          LIMIT 1
+        `,
+        [normalizedTable, normalizedColumn]
+      );
+
+      return rows.length > 0;
+    }
+  );
+}

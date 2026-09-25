@@ -125,7 +125,10 @@ export default async function AllServersChatPage({
                 </tr>
               ) : (
                 result.entries.map((entry, index) => (
-                  <tr key={entry.id} className={playerTableRowClass(ui.tableRow)}>
+                  <tr
+                    key={entry.id}
+                    className={playerTableRowClass(ui.tableRow, entry.playerId !== null)}
+                  >
                     <td className={ui.td}>
                       <PlayerTableCellLink playerId={entry.playerId}>
                         {(result.page - 1) * result.pageSize + index + 1}

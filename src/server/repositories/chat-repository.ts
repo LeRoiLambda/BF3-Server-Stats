@@ -1,6 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
-import { hasTable } from "@/src/server/db/schema";
+import { hasColumn, hasTable } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toDateTimeString } from "@/src/server/utils/dates";
@@ -28,7 +28,7 @@ export type ChatLogEntry = {
   countryCode: string | null;
   message: string;
   subset: string | null;
-  playerId: number;
+  playerId: number | null;
   banStatus: "active" | "expired" | null;
 };
 
@@ -49,7 +49,6 @@ export type ChatSearchSuggestion = {
 export type ChatSearchSuggestionInput = {
   serverId?: number;
   serverIds?: number[];
-  gameId: number;
   query: string;
   limit: number;
 };
@@ -73,11 +72,11 @@ type ChatRow = RowDataPacket & {
   serverId: number;
   serverName: string | null;
   logDate: string;
-  soldierName: string;
+  soldierName: string | null;
   countryCode: string | null;
   message: string;
   subset: string | null;
-  playerId: number;
+  playerId: number | null;
   banStatus?: string | null;
 };
 
@@ -266,13 +265,11 @@ export async function searchChatSuggestions(
 
   const pattern = containsPattern(query);
   const playerParams: Array<string | number> = [
-    input.gameId,
     ...scope.params,
     pattern,
     safeLimit
   ];
   const messageParams: Array<string | number> = [
-    input.gameId,
     ...scope.params,
     pattern,
     safeLimit
@@ -285,7 +282,6 @@ export async function searchChatSuggestions(
           cl.logSoldierName AS value,
           MAX(cl.logDate) AS lastSeen
         FROM tbl_chatlog cl
-        INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
         WHERE ${scope.sql}
           AND ${searchableText("cl.logSoldierName")} LIKE ?
         GROUP BY cl.logSoldierName
@@ -300,7 +296,6 @@ export async function searchChatSuggestions(
           TRIM(cl.logMessage) AS value,
           MAX(cl.logDate) AS lastSeen
         FROM tbl_chatlog cl
-        INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
         WHERE ${scope.sql}
           AND TRIM(cl.logMessage) != ''
           AND ${searchableText("cl.logMessage")} LIKE ?
@@ -374,11 +369,10 @@ export async function getServerChatLog(
   const offset = (page - 1) * pageSize;
   const orderBySql = chatOrderBy(sort, order);
 
-  const pageParams: Array<string | number> = [input.gameId, ...scope.params];
+  const pageParams: Array<string | number> = [...scope.params];
   let pageSql = `
     SELECT cl.ID AS id
     FROM tbl_chatlog cl
-    INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
     WHERE ${scope.sql}
   `;
 
@@ -419,33 +413,60 @@ export async function getServerChatLog(
     };
   }
 
-  const adkatsAvailable = await hasTable("adkats_bans");
+  const [adkatsAvailable, loggedPlayerIdAvailable] = await Promise.all([
+    hasTable("adkats_bans"),
+    hasColumn("tbl_chatlog", "logPlayerID")
+  ]);
   const idPlaceholders = pageIds.map(() => "?").join(", ");
   const orderedIdPlaceholders = pageIds.map(() => "?").join(", ");
   const logParams: Array<string | number> = [
     input.gameId,
     ...pageIds,
+    input.gameId,
     ...pageIds
   ];
+  // tbl_chatlog.logPlayerID exists only with AdKats and is NULL for server
+  // messages and for chat sent before a player's first stats upload; such lines
+  // match the speaker by name, and lines without any player are kept.
+  const namedPlayerIdSql = `(
+    SELECT MIN(p.PlayerID)
+    FROM tbl_playerdata p
+    WHERE p.GameID = ?
+      AND p.SoldierName = cl.logSoldierName
+  )`;
   const [rows] = await pool.query<ChatRow[]>(
     `
       SELECT
-        cl.ID AS id,
-        cl.ServerID AS serverId,
+        chat.id,
+        chat.serverId,
         ts.ServerName AS serverName,
-        cl.logDate AS logDate,
-        cl.logSoldierName AS soldierName,
+        chat.logDate,
+        chat.soldierName,
         tpd.CountryCode AS countryCode,
-        TRIM(cl.logMessage) AS message,
-        cl.logSubset AS subset,
-        cl.logPlayerID AS playerId
+        chat.message,
+        chat.subset,
+        tpd.PlayerID AS playerId
       ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-      FROM tbl_chatlog cl
-      LEFT JOIN tbl_server ts ON ts.ServerID = cl.ServerID
-      INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
-      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = cl.logPlayerID" : ""}
-      WHERE cl.ID IN (${idPlaceholders})
-      ORDER BY FIELD(cl.ID, ${orderedIdPlaceholders})
+      FROM (
+        SELECT
+          cl.ID AS id,
+          cl.ServerID AS serverId,
+          cl.logDate AS logDate,
+          cl.logSoldierName AS soldierName,
+          TRIM(cl.logMessage) AS message,
+          cl.logSubset AS subset,
+          ${
+            loggedPlayerIdAvailable
+              ? `COALESCE(cl.logPlayerID, ${namedPlayerIdSql})`
+              : namedPlayerIdSql
+          } AS playerId
+        FROM tbl_chatlog cl
+        WHERE cl.ID IN (${idPlaceholders})
+      ) chat
+      LEFT JOIN tbl_server ts ON ts.ServerID = chat.serverId
+      LEFT JOIN tbl_playerdata tpd ON tpd.PlayerID = chat.playerId AND tpd.GameID = ?
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
+      ORDER BY FIELD(chat.id, ${orderedIdPlaceholders})
     `,
     logParams
   );
@@ -456,11 +477,11 @@ export async function getServerChatLog(
       serverId: Number(row.serverId),
       serverName: row.serverName ?? null,
       logDate: toDateTimeString(row.logDate) ?? "",
-      soldierName: row.soldierName,
+      soldierName: row.soldierName ?? "",
       countryCode: row.countryCode ?? null,
       message: row.message,
       subset: row.subset ?? null,
-      playerId: Number(row.playerId),
+      playerId: row.playerId === null ? null : Number(row.playerId),
       banStatus:
         row.banStatus === "Active"
           ? "active"

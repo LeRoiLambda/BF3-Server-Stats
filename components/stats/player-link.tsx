@@ -17,7 +17,7 @@ type PlayerIdentityProps = Readonly<{
 }>;
 
 type PlayerTableCellLinkProps = Readonly<{
-  playerId: number;
+  playerId: number | null;
   serverId?: number | null;
   className?: string;
   children: ReactNode;
@@ -29,10 +29,11 @@ export function playerHref(playerId: number, serverId?: number | null): string {
   return `/players/${playerId}${query}`;
 }
 
-export function playerTableRowClass(className?: string): string {
+export function playerTableRowClass(className?: string, linked = true): string {
   return clsx(
     className,
-    "group/player-row cursor-pointer transition-colors hover:bg-slate-800/45"
+    linked &&
+      "group/player-row cursor-pointer transition-colors hover:bg-slate-800/45"
   );
 }
 
@@ -60,6 +61,12 @@ export function PlayerTableCellLink({
   className,
   children
 }: PlayerTableCellLinkProps) {
+  // Rows without a player record (server messages, unknown speakers) stay plain
+  // text.
+  if (playerId === null) {
+    return children;
+  }
+
   return (
     <Link
       href={playerHref(playerId, serverId)}

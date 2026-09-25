@@ -171,7 +171,7 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                 result.entries.map((entry, index) => (
                   <tr
                     key={entry.id}
-                    className={playerTableRowClass(ui.tableRow)}
+                    className={playerTableRowClass(ui.tableRow, entry.playerId !== null)}
                   >
                     <td className={ui.td}>
                       <PlayerTableCellLink
