@@ -694,15 +694,21 @@ function buildLadder(
     return null;
   }
 
+  // As in AdKats: a negative total counts as zero, and totals past the end of
+  // the ladder stay on the last step.
+  const nextIndex =
+    key === "punishment" && totalPoints !== null
+      ? Math.min(Math.max(Math.floor(totalPoints), 0), tokens.length - 1)
+      : null;
   const steps = tokens.map((token, index) => {
-    const isPrimary = key === "punishment" && totalPoints !== null;
-    const state: ModerationLadderStepState = !isPrimary
-      ? "future"
-      : index < totalPoints
-        ? "past"
-        : index === totalPoints
-          ? "next"
-          : "future";
+    const state: ModerationLadderStepState =
+      nextIndex === null
+        ? "future"
+        : index < nextIndex
+          ? "past"
+          : index === nextIndex
+            ? "next"
+            : "future";
 
     return {
       index,
