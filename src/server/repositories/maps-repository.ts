@@ -12,7 +12,8 @@ export type MapBreakdown = {
   mapCode: string;
   numberOfRounds: number;
   averagePlayers: number;
-  averagePopularity: number;
+  // Players who joined per player who left, as a percentage; null when nobody left.
+  joinsPerLeavePercent: number | null;
 };
 
 export type MapCoverage = {
@@ -43,11 +44,15 @@ type MapBreakdownRow = RowDataPacket & {
   mapCode: string;
   numberOfRounds: number;
   averagePlayers: number | null;
-  averagePopularity: number | null;
+  joinsPerLeavePercent: number | null;
 };
 
 type MapCoverageRow = RowDataPacket & {
   mapCode: string;
+  totalRounds: number;
+};
+
+type RoundCountRow = RowDataPacket & {
   totalRounds: number;
 };
 
@@ -60,6 +65,8 @@ function normalizeGamemode(value: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
+// tbl_mapstats has one row per round played; NumberofRounds is the map's
+// configured round count, not a count of rounds.
 export async function listServerGamemodeBreakdown(
   input: {
     serverId?: number;
@@ -72,7 +79,7 @@ export async function listServerGamemodeBreakdown(
     `
       SELECT
         Gamemode AS gamemode,
-        SUM(NumberofRounds) AS totalRounds
+        COUNT(*) AS totalRounds
       FROM tbl_mapstats
       WHERE ${scope.sql}
         AND Gamemode != ''
@@ -102,9 +109,9 @@ async function listServerMapsByGamemode(
     `
       SELECT
         MapName AS mapCode,
-        SUM(NumberofRounds) AS numberOfRounds,
+        COUNT(*) AS numberOfRounds,
         AVG(AvgPlayers) AS averagePlayers,
-        (AVG(AvgPlayers) / NULLIF(AVG(PlayersLeftServer), 0)) * 100 AS averagePopularity
+        (SUM(PlayersJoinedServer) / NULLIF(SUM(PlayersLeftServer), 0)) * 100 AS joinsPerLeavePercent
       FROM tbl_mapstats
       WHERE ${scope.sql}
         AND Gamemode = ?
@@ -119,7 +126,10 @@ async function listServerMapsByGamemode(
     mapCode: row.mapCode,
     numberOfRounds: Number(row.numberOfRounds ?? 0),
     averagePlayers: toFixedNumber(row.averagePlayers),
-    averagePopularity: toFixedNumber(row.averagePopularity)
+    joinsPerLeavePercent:
+      row.joinsPerLeavePercent === null
+        ? null
+        : toFixedNumber(row.joinsPerLeavePercent)
   }));
 }
 
@@ -133,26 +143,36 @@ async function listServerMapCoverage(
   const pool = getDbPool();
   const safeLimit = Math.max(1, Math.min(40, Math.floor(limit)));
   const scope = buildServerScopeCondition("ServerID", input);
-  const [rows] = await pool.query<MapCoverageRow[]>(
-    `
-      SELECT
-        MapName AS mapCode,
-        SUM(NumberofRounds) AS totalRounds
-      FROM tbl_mapstats
-      WHERE ${scope.sql}
-        AND Gamemode != ''
-        AND MapName != ''
-      GROUP BY MapName
-      ORDER BY totalRounds DESC
-      LIMIT ?
-    `,
-    [...scope.params, safeLimit]
-  );
+  const [[rows], [totalRows]] = await Promise.all([
+    pool.query<MapCoverageRow[]>(
+      `
+        SELECT
+          MapName AS mapCode,
+          COUNT(*) AS totalRounds
+        FROM tbl_mapstats
+        WHERE ${scope.sql}
+          AND Gamemode != ''
+          AND MapName != ''
+        GROUP BY MapName
+        ORDER BY totalRounds DESC
+        LIMIT ?
+      `,
+      [...scope.params, safeLimit]
+    ),
+    // Shares are relative to all rounds played, including maps outside the list.
+    pool.query<RoundCountRow[]>(
+      `
+        SELECT COUNT(*) AS totalRounds
+        FROM tbl_mapstats
+        WHERE ${scope.sql}
+          AND Gamemode != ''
+          AND MapName != ''
+      `,
+      scope.params
+    )
+  ]);
 
-  const totalRounds = rows.reduce(
-    (sum, row) => sum + Number(row.totalRounds ?? 0),
-    0
-  );
+  const totalRounds = Number(totalRows[0]?.totalRounds ?? 0);
 
   return rows.map((row) => {
     const rounds = Number(row.totalRounds ?? 0);

@@ -161,7 +161,11 @@ export default async function MapsPage({ params, searchParams }: MapsPageProps) 
                         <td className={ui.td}>{map.mapCode}</td>
                         <td className={ui.td}>{map.numberOfRounds}</td>
                         <td className={ui.td}>{map.averagePlayers.toFixed(2)}</td>
-                        <td className={ui.td}>{map.averagePopularity.toFixed(2)}%</td>
+                        <td className={ui.td}>
+                          {map.joinsPerLeavePercent === null
+                            ? "-"
+                            : `${map.joinsPerLeavePercent.toFixed(2)}%`}
+                        </td>
                       </tr>
                     ))
                   )}
