@@ -142,6 +142,12 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     serverId !== null
       ? context.servers.find((server) => server.serverId === serverId) ?? null
       : null;
+  const profileScope = {
+    playerId,
+    gameId,
+    serverId: serverScope?.serverId ?? null,
+    serverIds: context.servers.map((server) => server.serverId)
+  };
 
   const [
     profile,
@@ -153,31 +159,15 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
     weeklyTopPlayers
   ] =
     await Promise.all([
-      getPlayerProfileById({
-        playerId,
-        gameId,
-        serverId: serverScope?.serverId ?? null
-      }),
-      getPlayerRankPositions({
-        playerId,
-        gameId,
-        serverId: serverScope?.serverId ?? null
-      }),
-      listPlayerWeapons({
-        playerId,
-        gameId,
-        serverId: serverScope?.serverId ?? null
-      }),
+      getPlayerProfileById(profileScope),
+      getPlayerRankPositions(profileScope),
+      listPlayerWeapons(profileScope),
       listPlayerDogtagLosses({
-        playerId,
-        gameId,
-        serverId: serverScope?.serverId ?? null,
+        ...profileScope,
         limit: 20
       }),
       listPlayerDogtagCollections({
-        playerId,
-        gameId,
-        serverId: serverScope?.serverId ?? null,
+        ...profileScope,
         limit: 20
       }),
       getPlayerModerationSummary({
@@ -261,6 +251,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         battlelogHref={battlelogHref}
         weeklyPodium={weeklyPodium}
       />
+
+      {!profile.hasStats ? (
+        <p className={`mt-6 ${ui.card} text-sm text-slate-300`}>
+          {serverScope
+            ? `No stats recorded for this player on ${serverScope.serverName} yet.`
+            : "No stats recorded for this player yet."}
+        </p>
+      ) : null}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <article className={ui.card}>
