@@ -113,6 +113,18 @@ npm run test
 - `typecheck` runs TypeScript without emitting files.
 - `test` runs the unit tests in `tests/` with Vitest.
 
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: lint, type
+check, unit tests and build, then `scripts/smoke-test.mjs`, which requests
+every page and API route against the sample database on MariaDB 10.11 and
+MySQL 8.0, with and without the AdKats tables. To run the smoke test locally,
+point it at running servers:
+
+```sh
+node scripts/smoke-test.mjs http://localhost:3000
+```
+
 ## Main Routes
 
 | Route | Purpose |
