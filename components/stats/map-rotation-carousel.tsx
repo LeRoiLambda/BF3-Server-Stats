@@ -32,7 +32,6 @@ type CarouselEntry = {
   rounds: number | null;
   currentRound: number | null;
   totalRounds: number | null;
-  updatedAt: string | null;
 };
 
 type RotationContext = {
@@ -50,15 +49,13 @@ function entryFromRotation(entry: MapRotationEntry): CarouselEntry {
     mapIndex: entry.mapIndex,
     rounds: entry.rounds,
     currentRound: entry.currentRound,
-    totalRounds: entry.totalRounds,
-    updatedAt: entry.updatedAt
+    totalRounds: entry.totalRounds
   };
 }
 
 function fallbackEntry(
   mapCode: string | null,
-  gamemode: string | null,
-  updatedAt: string | null = null
+  gamemode: string | null
 ): CarouselEntry {
   return {
     mapCode,
@@ -66,8 +63,7 @@ function fallbackEntry(
     mapIndex: null,
     rounds: null,
     currentRound: null,
-    totalRounds: null,
-    updatedAt
+    totalRounds: null
   };
 }
 
