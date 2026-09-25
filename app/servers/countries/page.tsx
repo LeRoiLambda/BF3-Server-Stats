@@ -28,10 +28,14 @@ export default async function AllServersCountriesPage({
 }: AllServersCountriesPageProps) {
   const scope = await getAllServersPageScope("countries");
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const requestedCodes = (firstValue(resolvedSearchParams.c) ?? "")
-    .split(",")
-    .map((code) => normalizeCountryCode(code))
-    .filter((code): code is string => Boolean(code));
+  const requestedCodes = Array.from(
+    new Set(
+      (firstValue(resolvedSearchParams.c) ?? "")
+        .split(",")
+        .map((code) => normalizeCountryCode(code))
+        .filter((code): code is string => Boolean(code))
+    )
+  );
   const direct = normalizeCountryCode(firstValue(resolvedSearchParams.country));
   const snapshot = await getServerCountriesSnapshot({
     serverIds: scope.serverIds,
