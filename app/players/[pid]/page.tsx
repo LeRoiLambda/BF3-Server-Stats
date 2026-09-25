@@ -173,6 +173,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
       getPlayerModerationSummary({
         playerId,
         serverId: serverScope?.serverId ?? null,
+        activeServerIds: profileScope.serverIds,
         recentLimit: 5
       }),
       serverScope === null

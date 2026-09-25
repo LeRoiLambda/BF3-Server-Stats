@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { parseUtcDateTime, toDateTimeString } from "@/src/server/utils/dates";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
@@ -74,14 +75,18 @@ export type PlayerModerationSummary = {
   recentActions: ModerationAction[];
 };
 
+// activeServerIds are the servers the site lists; AdKats settings come only
+// from those.
 export type PlayerModerationInput = {
   playerId: number;
   serverId: number | null;
+  activeServerIds: number[];
   recentLimit?: number;
 };
 
 export type ModerationPolicyInput = {
   serverId: number | null;
+  activeServerIds: number[];
 };
 
 export type ModerationPolicy = {
@@ -512,6 +517,7 @@ async function getCurrentMuteStatus(
 
 async function listSettingsRows(
   serverId: number | null,
+  activeServerIds: number[],
   availability: ModerationAvailability
 ): Promise<SettingRow[]> {
   if (!availability.settings) {
@@ -540,6 +546,9 @@ async function listSettingsRows(
     }
   }
 
+  const scope = buildServerScopeCondition("server_id", {
+    serverIds: activeServerIds
+  });
   const [rows] = await pool.query<SettingRow[]>(
     `
       SELECT
@@ -547,10 +556,11 @@ async function listSettingsRows(
         setting_name AS settingName,
         setting_value AS settingValue
       FROM adkats_settings
-      WHERE setting_name IN (${namesSql})
+      WHERE ${scope.sql}
+        AND setting_name IN (${namesSql})
       ORDER BY server_id ASC, setting_name ASC
     `,
-    SETTING_NAMES
+    [...scope.params, ...SETTING_NAMES]
   );
 
   return rows;
@@ -1058,7 +1068,7 @@ export async function getPlayerModerationSummary(
   const [currentStatus, muteStatus, settingsRows] = await Promise.all([
     getCurrentStatus(input.playerId, availability),
     getCurrentMuteStatus(input, availability),
-    listSettingsRows(input.serverId, availability)
+    listSettingsRows(input.serverId, input.activeServerIds, availability)
   ]);
   const initialSettings = parseSettings(settingsRows, input.serverId, null);
   const points = await getInfractionPoints(
@@ -1093,7 +1103,11 @@ export async function getModerationPolicy(
     };
   }
 
-  const settingsRows = await listSettingsRows(input.serverId, availability);
+  const settingsRows = await listSettingsRows(
+    input.serverId,
+    input.activeServerIds,
+    availability
+  );
   const settings = parseSettings(settingsRows, input.serverId, null);
 
   return {

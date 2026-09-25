@@ -83,7 +83,8 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
       pageSize: 20
     }),
     getModerationPolicy({
-      serverId: server.serverId
+      serverId: server.serverId,
+      activeServerIds: context.servers.map((entry) => entry.serverId)
     })
   ]);
 

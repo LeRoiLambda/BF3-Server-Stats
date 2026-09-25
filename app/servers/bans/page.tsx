@@ -52,7 +52,8 @@ export default async function AllServersBansPage({
       pageSize: 20
     }),
     getModerationPolicy({
-      serverId: null
+      serverId: null,
+      activeServerIds: scope.serverIds
     })
   ]);
 
