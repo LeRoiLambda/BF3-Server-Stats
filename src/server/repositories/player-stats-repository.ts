@@ -536,12 +536,13 @@ export async function listCurrentPlayersByServer(input: {
   const orderSql = order.toUpperCase();
   const adkatsAvailable = await hasAdkatsBansTable();
 
-  // Players new to this server have no player or stats rows until the next map
-  // load.
+  // Names are matched across the game, as in chat: a player known from another
+  // server links to their profile before their first stats here, which the
+  // logger writes at the next map load. Players new to the game stay unlinked.
   const [rows] = await pool.query<CurrentPlayerRow[]>(
     `
       SELECT
-        resolved.playerId AS playerId,
+        cp.playerId,
         cp.Soldiername AS soldierName,
         cp.Score AS score,
         cp.Kills AS kills,
@@ -550,23 +551,29 @@ export async function listCurrentPlayersByServer(input: {
         cp.SquadID AS squadId,
         cp.CountryCode AS countryCode
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-      FROM tbl_currentplayers cp
-      LEFT JOIN (
+      FROM (
         SELECT
-          MIN(tpd.PlayerID) AS playerId,
-          tpd.SoldierName AS soldierName
-        FROM tbl_playerdata tpd
-        INNER JOIN tbl_server_player tsp ON tsp.PlayerID = tpd.PlayerID
-        WHERE tpd.GameID = ?
-          AND tsp.ServerID = ?
-        GROUP BY tpd.SoldierName
-      ) resolved ON resolved.soldierName = cp.Soldiername
-      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = resolved.playerId" : ""}
-      WHERE cp.ServerID = ?
+          tcp.Soldiername,
+          tcp.Score,
+          tcp.Kills,
+          tcp.Deaths,
+          tcp.TeamID,
+          tcp.SquadID,
+          tcp.CountryCode,
+          (
+            SELECT MIN(tpd.PlayerID)
+            FROM tbl_playerdata tpd
+            WHERE tpd.GameID = ?
+              AND tpd.SoldierName = tcp.Soldiername
+          ) AS playerId
+        FROM tbl_currentplayers tcp
+        WHERE tcp.ServerID = ?
+      ) cp
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = cp.playerId" : ""}
       ORDER BY cp.TeamID ASC, ${sortExpression} ${orderSql}, cp.Soldiername ASC
       LIMIT 128
     `,
-    [input.gameId, input.serverId, input.serverId]
+    [input.gameId, input.serverId]
   );
 
   return rows.map((row) => ({
