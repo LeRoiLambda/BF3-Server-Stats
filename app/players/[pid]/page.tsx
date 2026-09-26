@@ -40,15 +40,6 @@ type PlayerPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function parsePlayerId(rawPid: string): number | null {
-  const parsed = Number.parseInt(rawPid, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
-
 function parseDogtagView(value: string | null): DogtagView {
   return value === "surrendered" ? "surrendered" : "collected";
 }
@@ -121,7 +112,7 @@ function groupWeaponsByCategory(weapons: PlayerWeapon[]): WeaponCategoryGroup[] 
 
 export default async function PlayerPage({ params, searchParams }: PlayerPageProps) {
   const { pid } = await params;
-  const playerId = parsePlayerId(pid);
+  const playerId = parsePositiveInt(pid);
   if (!playerId) {
     notFound();
   }

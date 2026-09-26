@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchPlayersByName } from "@/src/server/repositories/player-profile-repository";
 import { getServerContext } from "@/src/server/repositories/server-repository";
+import { parsePositiveInt } from "@/src/server/routing/params";
 
 export const revalidate = 0;
-
-function parseServerId(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
 
 function parseLimit(value: string | null): number {
   if (!value) {
@@ -41,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ suggestions: [], players: [] });
   }
 
-  const requestedServerId = parseServerId(request.nextUrl.searchParams.get("sid"));
+  const requestedServerId = parsePositiveInt(request.nextUrl.searchParams.get("sid") ?? "");
   const serverId =
     requestedServerId !== null &&
     context.servers.some((server) => server.serverId === requestedServerId)

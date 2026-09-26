@@ -5,10 +5,7 @@ import {
 } from "@/src/server/routing/server-pages";
 
 export default async function AllServersMapsPage({ searchParams }: AllServersPageProps) {
-  return (
-    <MapsSection
-      scope={await getAllServersPageScope("maps")}
-      searchParams={(await searchParams) ?? {}}
-    />
-  );
+  const query = (await searchParams) ?? {};
+
+  return <MapsSection scope={await getAllServersPageScope("maps", query)} searchParams={query} />;
 }

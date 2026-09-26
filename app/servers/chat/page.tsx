@@ -5,10 +5,7 @@ import {
 } from "@/src/server/routing/server-pages";
 
 export default async function AllServersChatPage({ searchParams }: AllServersPageProps) {
-  return (
-    <ChatSection
-      scope={await getAllServersPageScope("chat")}
-      searchParams={(await searchParams) ?? {}}
-    />
-  );
+  const query = (await searchParams) ?? {};
+
+  return <ChatSection scope={await getAllServersPageScope("chat", query)} searchParams={query} />;
 }

@@ -8,12 +8,10 @@ export function firstValue(
   return value ?? null;
 }
 
-export function parsePositiveInt(value: string): number | null {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
+const POSITIVE_INT_PATTERN = /^[1-9]\d{0,14}$/;
 
-  return parsed;
+// Ids in paths and queries: digits only, so "1abc" or "1e3" match nothing.
+export function parsePositiveInt(value: string): number | null {
+  return POSITIVE_INT_PATTERN.test(value) ? Number(value) : null;
 }
 

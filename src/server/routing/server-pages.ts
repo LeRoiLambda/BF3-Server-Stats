@@ -102,13 +102,31 @@ export function nextOrder<TSort extends string>(
   return order === "asc" ? "desc" : "asc";
 }
 
+// The request's query, to keep through a redirect.
+function searchParamsQuery(searchParams: SearchParams): string {
+  const params = new URLSearchParams();
+
+  for (const [name, value] of Object.entries(searchParams)) {
+    for (const entry of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+      params.append(name, entry);
+    }
+  }
+
+  return params.toString();
+}
+
+// With a single listed server, all-servers pages redirect to its page, with
+// the same query.
 export async function getAllServersPageScope(
-  section: ServerSection
+  section: ServerSection,
+  searchParams: SearchParams = {}
 ): Promise<AllServersPageScope> {
   const context = await getServerContext();
 
   if (context.servers.length === 1) {
-    redirect(serverSectionHref(context.servers[0].serverId, section));
+    const path = serverSectionHref(context.servers[0].serverId, section);
+    const query = searchParamsQuery(searchParams);
+    redirect(query ? `${path}?${query}` : path);
   }
 
   if (!context.gameId || context.servers.length === 0) {
