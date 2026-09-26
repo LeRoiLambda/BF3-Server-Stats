@@ -137,6 +137,7 @@ function Speaker({ message }: Readonly<{ message: ChatMessageView }>) {
         name
       )}
       <PlayerDisciplineBadge status={message.banStatus} density="compact" />
+      <span className="text-slate-400">:</span>
     </span>
   );
 }
@@ -555,7 +556,7 @@ export function ChatTranscript({
         ) : (
           <span className="inline-flex items-center gap-2">
             <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-            Live: new messages appear as they are sent
+            Live
           </span>
         )}
         <span>Times in {timeZone}</span>
