@@ -4,14 +4,16 @@ import { Menu } from "@base-ui/react/menu";
 import { clsx } from "clsx";
 import Link from "next/link";
 
-type ServerScopeOption = Readonly<{
+export type LinkMenuItem = Readonly<{
   label: string;
   href: string;
+  current: boolean;
 }>;
 
-type ServerScopeMenuProps = Readonly<{
-  value: string;
-  options: ServerScopeOption[];
+type LinkMenuProps = Readonly<{
+  label: string;
+  items: LinkMenuItem[];
+  align?: "start" | "end";
   className?: string;
 }>;
 
@@ -31,13 +33,13 @@ function CheckIcon() {
   );
 }
 
-export function ServerScopeMenu({ value, options, className }: ServerScopeMenuProps) {
-  const current = options.find((option) => option.href === value) ?? options[0];
+export function LinkMenu({ label, items, align = "start", className }: LinkMenuProps) {
+  const current = items.find((item) => item.current) ?? items[0];
 
   return (
     <Menu.Root>
       <Menu.Trigger
-        aria-label={`Server: ${current?.label ?? ""}`}
+        aria-label={`${label}: ${current?.label ?? ""}`}
         className={clsx(
           "flex h-9 items-center justify-between gap-2 rounded-sm border border-slate-600 bg-slate-950/85 px-3 text-left text-sm text-slate-100 hover:border-slate-400 focus:outline-none focus-visible:border-slate-300 data-[popup-open]:border-slate-400",
           className
@@ -47,26 +49,23 @@ export function ServerScopeMenu({ value, options, className }: ServerScopeMenuPr
         <ChevronIcon />
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Positioner sideOffset={6} align="end" className="z-40">
+        <Menu.Positioner sideOffset={6} align={align} className="z-40">
           <Menu.Popup className="max-h-[var(--available-height)] min-w-[var(--anchor-width)] overflow-y-auto rounded-sm border border-slate-600/70 bg-slate-950 py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] outline-none transition-opacity duration-100 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0">
-            {options.map((option) => {
-              const selected = option.href === current?.href;
-              return (
-                <Menu.LinkItem
-                  key={option.href}
-                  closeOnClick
-                  aria-current={selected ? "page" : undefined}
-                  render={<Link href={option.href} prefetch={false} />}
-                  className={clsx(
-                    "flex items-center justify-between gap-6 px-3 py-2 text-sm outline-none data-[highlighted]:bg-teal-900/50",
-                    selected ? "font-semibold text-slate-50" : "text-slate-200"
-                  )}
-                >
-                  {option.label}
-                  {selected ? <CheckIcon /> : null}
-                </Menu.LinkItem>
-              );
-            })}
+            {items.map((item) => (
+              <Menu.LinkItem
+                key={item.href}
+                closeOnClick
+                aria-current={item.current ? "page" : undefined}
+                render={<Link href={item.href} prefetch={false} />}
+                className={clsx(
+                  "flex items-center justify-between gap-6 px-3 py-2 text-sm outline-none data-[highlighted]:bg-teal-900/50",
+                  item.current ? "font-semibold text-slate-50" : "text-slate-200"
+                )}
+              >
+                {item.label}
+                {item.current ? <CheckIcon /> : null}
+              </Menu.LinkItem>
+            ))}
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>

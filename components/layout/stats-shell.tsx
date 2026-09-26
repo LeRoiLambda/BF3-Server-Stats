@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { navButtonClass, ui } from "@/components/layout/stats-ui";
-import { ServerScopeMenu } from "@/components/layout/server-scope-menu";
+import { LinkMenu } from "@/components/layout/link-menu";
 import { PlayerProfileSearchForm } from "@/components/search/player-profile-search-form";
 import {
   SERVER_NAV_SECTIONS,
@@ -76,6 +76,7 @@ export function StatsShell({
     ? effectiveScopeOptions.length > 1
     : hasMultipleServers;
   const bannerImage = readEnv().BF3_STATS_BANNER_IMAGE;
+  const sections: ServerSection[] = ["home", ...SERVER_NAV_SECTIONS];
 
   return (
     <main className={ui.pageContainer}>
@@ -105,10 +106,14 @@ export function StatsShell({
             {battlelogHref || hasScopeSelect || titleAction ? (
               <div className="flex w-full shrink-0 flex-nowrap items-center justify-end gap-2 sm:w-auto">
                 {hasScopeSelect ? (
-                  <ServerScopeMenu
-                    value={effectiveScopeValue}
-                    options={effectiveScopeOptions}
-                    className="w-56 min-w-0 max-w-full"
+                  <LinkMenu
+                    label="Server"
+                    align="end"
+                    items={effectiveScopeOptions.map((option) => ({
+                      ...option,
+                      current: option.href === effectiveScopeValue
+                    }))}
+                    className="min-w-0 flex-1 sm:w-56 sm:flex-none"
                   />
                 ) : null}
                 {titleAction}
@@ -134,14 +139,8 @@ export function StatsShell({
 
         <section className="bg-slate-950/70 px-3 py-3 sm:rounded-b-sm sm:px-6">
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <nav className="flex min-w-0 flex-wrap gap-1.5 xl:flex-nowrap">
-              <Link
-                href={sectionHref("home")}
-                className={navButtonClass(activeSection === "home")}
-              >
-                Home
-              </Link>
-              {SERVER_NAV_SECTIONS.map((section) => (
+            <nav aria-label="Sections" className="hidden min-w-0 flex-wrap gap-1.5 sm:flex xl:flex-nowrap">
+              {sections.map((section) => (
                 <Link
                   key={section}
                   href={sectionHref(section)}
@@ -152,7 +151,16 @@ export function StatsShell({
               ))}
             </nav>
 
-            <div className="flex min-w-0 justify-end xl:shrink-0">
+            <div className="flex min-w-0 items-center gap-2 sm:justify-end xl:shrink-0">
+              <LinkMenu
+                label="Section"
+                items={sections.map((section) => ({
+                  label: sectionLabel(section),
+                  href: sectionHref(section),
+                  current: section === activeSection
+                }))}
+                className="w-32 shrink-0 sm:hidden"
+              />
               <PlayerProfileSearchForm
                 serverId={currentServerId}
                 inputClassName={ui.input}
