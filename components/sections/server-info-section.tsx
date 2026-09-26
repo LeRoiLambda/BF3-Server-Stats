@@ -14,7 +14,7 @@ import {
   scopeServers,
   type PageScope
 } from "@/src/server/routing/server-pages";
-import { siteTimeZone } from "@/src/server/utils/site-time";
+import { siteTimeZone, siteTimeZoneCity } from "@/src/server/utils/site-time";
 
 type ServerInfoSectionProps = {
   scope: PageScope;
@@ -110,7 +110,7 @@ export async function ServerInfoSection({ scope }: ServerInfoSectionProps) {
         </>
       )}
 
-      <DailyPlayerTrendChart data={dailyTrend} />
+      <DailyPlayerTrendChart data={dailyTrend} zoneCity={siteTimeZoneCity()} />
 
       <section className={`mt-6 ${ui.panel}`}>
         <h2 className={`mb-3 ${ui.sectionTitle}`}>Recent Rounds</h2>

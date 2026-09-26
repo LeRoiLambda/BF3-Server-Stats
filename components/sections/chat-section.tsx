@@ -20,7 +20,7 @@ import {
   type PageScope,
   type SearchParams
 } from "@/src/server/routing/server-pages";
-import { siteTimeZone } from "@/src/server/utils/site-time";
+import { siteTimeZone, siteTimeZoneCity } from "@/src/server/utils/site-time";
 import { dateInZone, formatSqlDate, wallClockInTimeZone } from "@/src/server/utils/time-zones";
 
 type ChatSectionProps = {
@@ -154,9 +154,9 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
             ...filterValues,
             sid: serverId === null ? null : String(serverId)
           })}
-          timeZone={timeZone}
           filtered={filtered}
           emptyLabel={emptyLabel(params, filtered, timeZone)}
+          zoneCity={siteTimeZoneCity()}
         />
       </section>
     </StatsShell>

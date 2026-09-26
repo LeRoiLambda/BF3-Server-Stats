@@ -22,6 +22,7 @@ import type { ServerDailyPlayersSnapshot } from "@/src/server/repositories/serve
 
 type DailyPlayerTrendChartProps = {
   data: ServerDailyPlayersSnapshot[];
+  zoneCity: string;
 };
 
 type TrendDatum = ServerDailyPlayersSnapshot & {
@@ -115,7 +116,7 @@ function CustomTooltip({
   );
 }
 
-export function DailyPlayerTrendChart({ data }: DailyPlayerTrendChartProps) {
+export function DailyPlayerTrendChart({ data, zoneCity }: DailyPlayerTrendChartProps) {
   const chart = useMemo(() => {
     const points = data
       .filter((entry) => entry.date && Number.isFinite(entry.averagePlayers))
@@ -180,7 +181,8 @@ export function DailyPlayerTrendChart({ data }: DailyPlayerTrendChartProps) {
         <div>
           <h2 className={ui.sectionTitle}>Daily Player Trend</h2>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
-            Last {chart.points.length} active days. Average peak players with round volume.
+            Last {chart.points.length} active days, {zoneCity} time. Average peak players
+            with round volume.
           </p>
         </div>
         <div className="grid gap-x-6 gap-y-3 border-y border-slate-700/55 py-3 text-sm sm:grid-cols-4 lg:min-w-[34rem] lg:border-y-0 lg:py-0">

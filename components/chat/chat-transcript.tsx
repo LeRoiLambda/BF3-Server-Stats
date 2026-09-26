@@ -27,9 +27,9 @@ type ChatTranscriptProps = Readonly<{
   pagePath: string;
   filterQuery: string;
   apiQuery: string;
-  timeZone: string;
   filtered: boolean;
   emptyLabel: string;
+  zoneCity: string;
 }>;
 
 type LoadKind = "older" | "newer" | "follow" | "latest";
@@ -221,9 +221,9 @@ export function ChatTranscript({
   pagePath,
   filterQuery,
   apiQuery,
-  timeZone,
   filtered,
-  emptyLabel
+  emptyLabel,
+  zoneCity
 }: ChatTranscriptProps) {
   const [messages, setMessages] = useState(initial.messages);
   const [hasOlder, setHasOlder] = useState(initial.hasOlder);
@@ -540,7 +540,7 @@ export function ChatTranscript({
             Live
           </span>
         )}
-        <span>Times in {timeZone}</span>
+        <span>{zoneCity} time</span>
       </div>
 
       <p aria-live="polite" className="sr-only">
