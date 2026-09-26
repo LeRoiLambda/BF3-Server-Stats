@@ -10,7 +10,6 @@ export function firstValue(
 
 const POSITIVE_INT_PATTERN = /^[1-9]\d{0,14}$/;
 
-// Ids in paths and queries: digits only, so "1abc" or "1e3" match nothing.
 export function parsePositiveInt(value: string): number | null {
   return POSITIVE_INT_PATTERN.test(value) ? Number(value) : null;
 }

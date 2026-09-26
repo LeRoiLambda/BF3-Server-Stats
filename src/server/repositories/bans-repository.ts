@@ -117,7 +117,6 @@ function toBannedPlayer(row: BannedRow): BannedPlayer {
     countryCode: row.countryCode,
     kdr: toFixedNumber(row.kdr),
     hsr: toFixedNumber(row.hsr),
-    // AdKats writes ban times in UTC.
     bannedAt: parseUtcDateTime(row.bannedAt),
     reason: row.reason ? row.reason : null
   };

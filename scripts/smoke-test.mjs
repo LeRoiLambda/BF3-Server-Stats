@@ -1,7 +1,4 @@
-// Requests every page and API route of running servers backed by the sample
-// database (sample-db/) and fails on any unexpected status code.
-//
-//   node scripts/smoke-test.mjs http://127.0.0.1:3000 [more base URLs...]
+// Usage: node scripts/smoke-test.mjs <base URL> [more base URLs...]
 
 const SERVER_IDS = [1, 2];
 
@@ -80,13 +77,12 @@ const ROUTES = [
 
 async function waitForHealth(baseUrl) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const response = await fetch(`${baseUrl}/api/health`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // The server is still starting.
+    const ready = await fetch(`${baseUrl}/api/health`).then(
+      (response) => response.ok,
+      () => false
+    );
+    if (ready) {
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }

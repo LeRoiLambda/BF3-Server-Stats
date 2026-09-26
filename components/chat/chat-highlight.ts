@@ -1,5 +1,4 @@
-// Finds search terms in messages as the database matches them: utf8mb4's
-// default collations ignore case and accents, so "munchen" finds "München".
+// Case- and accent-insensitive, like utf8mb4's default collations.
 
 export type HighlightPart = {
   text: string;
@@ -10,16 +9,12 @@ export function foldForSearch(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 }
 
-// `text` cut into the parts that contain one of `terms` and the parts
-// between them.
 export function highlightParts(text: string, terms: string[]): HighlightPart[] {
   const foldedTerms = terms.map(foldForSearch).filter(Boolean);
   if (foldedTerms.length === 0) {
     return [{ text, match: false }];
   }
 
-  // Folding can change a character's length, so each folded code unit keeps
-  // the bounds of the character it came from.
   let folded = "";
   const starts: number[] = [];
   const ends: number[] = [];

@@ -11,11 +11,9 @@ import { CHAT_CHANNELS, type ChatParams } from "@/src/server/routing/chat-params
 type ChatFiltersProps = Readonly<{
   params: ChatParams;
   player: ChatPlayer | null;
-  // Today's "YYYY-MM-DD" date on the site's clock, the latest day to jump to.
   today: string;
   jump: { date: string; hour: string };
   pagePath: string;
-  // The filters as query values, and as a query string.
   filterValues: ChatQueryValues;
   filterQuery: string;
 }>;
@@ -37,8 +35,6 @@ function HiddenFields({ values }: Readonly<{ values: ChatQueryValues }>) {
   );
 }
 
-// Filters narrow the messages (words, player, channel); "jump to" shows a
-// day, or an hour of it, from its end back. Each keeps the others.
 export function ChatFilters({
   params,
   player,

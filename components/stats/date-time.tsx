@@ -7,7 +7,6 @@ type DateTimeProps = {
   className?: string;
 };
 
-// A time on the site's clock, labelled with its zone.
 export function DateTime({ value, fallback = "Unknown", className }: DateTimeProps) {
   if (!value) {
     return <span className={className}>{fallback}</span>;

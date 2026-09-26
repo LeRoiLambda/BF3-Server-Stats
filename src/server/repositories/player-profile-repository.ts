@@ -161,8 +161,6 @@ type PlayerRankPositionRow = RowDataPacket & {
   rankPosition: number | null;
 };
 
-// A null serverId means all servers the site lists (serverIds); hidden servers
-// are never included.
 type PlayerServerScopeInput = {
   serverId: number | null;
   serverIds: number[];
@@ -329,8 +327,6 @@ export async function getPlayerProfileById(
     .map((column) => `, ${column}`)
     .join("");
 
-  // Starts from tbl_playerdata, so a player without stats in the scope still
-  // has a profile.
   const [rows] = await pool.query<PlayerProfileRow[]>(
     `
       SELECT

@@ -22,8 +22,6 @@ function normalizeBannerImagePath(value: string): string {
   return imagePath;
 }
 
-// Blank values (`NAME=`) count as unset, so optional variables get their
-// defaults.
 function blankAsUnset(value: unknown): unknown {
   return typeof value === "string" && value.trim() === "" ? undefined : value;
 }

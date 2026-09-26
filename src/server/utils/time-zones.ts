@@ -11,7 +11,6 @@ const SQL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2
 
 const MS_PER_DAY = 86_400_000;
 
-// Building a formatter costs far more than using one, so each zone gets one.
 const wallClockFormats = new Map<string, Intl.DateTimeFormat>();
 const zoneNameFormats = new Map<string, Intl.DateTimeFormat>();
 
@@ -19,7 +18,6 @@ function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-// Whether `value` names a time zone Intl knows, such as "Europe/Paris".
 export function isValidTimeZone(value: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: value });
@@ -65,19 +63,12 @@ export function wallClockInTimeZone(date: Date, timeZone: string): WallClock {
   };
 }
 
-// The zone's offset from UTC at `instant`, in milliseconds.
 function offsetAt(instant: number, timeZone: string): number {
   const wallClock = wallClockInTimeZone(new Date(instant), timeZone);
   return wallClockToNaiveDate(wallClock).getTime() - instant;
 }
 
-// Finds the instant at which the given wall-clock time occurs in `timeZone`,
-// trying the offsets in force a day before and a day after it. A time that
-// occurs twice, when clocks go back, gives the earlier instant. A time that
-// clocks skip when they go forward is read with the offset in force before
-// the change, which moves it forward: 02:30 on the day Los Angeles moves to
-// PDT is 03:30 PDT, and a day whose midnight is skipped, as in Santiago,
-// starts at 01:00.
+// A repeated wall-clock time gives its earlier instant; a skipped one moves past the change.
 export function wallClockToInstant(wallClock: WallClock, timeZone: string): Date {
   const wallTime = wallClockToNaiveDate(wallClock).getTime();
   const offsetBefore = offsetAt(wallTime - MS_PER_DAY, timeZone);
@@ -91,8 +82,7 @@ export function wallClockToInstant(wallClock: WallClock, timeZone: string): Date
   );
 }
 
-// Calendar arithmetic on wall-clock values without any time zone: the value is
-// held in a Date whose UTC fields are the wall-clock fields.
+// A Date whose UTC fields hold a wall-clock time, for calendar arithmetic without a zone.
 export function wallClockToNaiveDate(wallClock: WallClock): Date {
   return new Date(Date.UTC(
     wallClock.year,
@@ -126,8 +116,6 @@ export function formatSqlDateTime(wallClock: WallClock): string {
   ].join(" ");
 }
 
-// Reads a stored "YYYY-MM-DD HH:MM:SS" value. Zero dates and impossible ones
-// such as 2026-02-31 return null.
 export function parseSqlDateTime(value: unknown): WallClock | null {
   if (typeof value !== "string") {
     return null;
@@ -145,7 +133,6 @@ export function parseSqlDateTime(value: unknown): WallClock | null {
   return formatSqlDateTime(normalized) === formatSqlDateTime(wallClock) ? wallClock : null;
 }
 
-// The instant of a stored UTC value, such as an AdKats record time.
 export function parseUtcDateTime(value: unknown): Date | null {
   const wallClock = parseSqlDateTime(value);
   return wallClock ? wallClockToNaiveDate(wallClock) : null;
@@ -164,19 +151,14 @@ function zoneName(instant: Date, timeZone: string): string {
   );
 }
 
-// "2026-09-25 09:00:00 PDT": the time in `timeZone`, followed by the zone's
-// abbreviation or, for zones without one in English, its UTC offset.
 export function formatInZone(instant: Date, timeZone: string): string {
   return `${formatSqlDateTime(wallClockInTimeZone(instant, timeZone))} ${zoneName(instant, timeZone)}`;
 }
 
-// The "YYYY-MM-DD" date in `timeZone` at `instant`.
 export function dateInZone(instant: Date, timeZone: string): string {
   return formatSqlDate(wallClockInTimeZone(instant, timeZone));
 }
 
-// The "YYYY-MM-DD" dates in `timeZone` from the one containing `from` to the
-// one containing `to`.
 export function datesInZone(from: Date, to: Date, timeZone: string): string[] {
   const lastDate = dateInZone(to, timeZone);
   const day = wallClockToNaiveDate({
@@ -197,7 +179,6 @@ export function datesInZone(from: Date, to: Date, timeZone: string): string[] {
   return dates;
 }
 
-// The instant a "YYYY-MM-DD" date starts in `timeZone`, `days` days later.
 export function dayStartInZone(date: string, timeZone: string, days = 0): Date {
   const [year, month, day] = date.split("-").map(Number);
 

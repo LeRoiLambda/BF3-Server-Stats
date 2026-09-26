@@ -37,7 +37,6 @@ export type ServerRoundSnapshot = {
   leftPlayers: number;
 };
 
-// `date` is a "YYYY-MM-DD" date in the time zone the trend was read for.
 export type ServerDailyPlayersSnapshot = {
   date: string;
   averagePlayers: number;
@@ -87,7 +86,6 @@ type ServerDailyPlayersSnapshotRow = RowDataPacket & {
   roundCount: number | null;
 };
 
-// A day in some time zone, with its start and end on the logger's clock.
 type ZoneDay = {
   date: string;
   start: string;
@@ -101,8 +99,6 @@ export async function getServerDetailStats(
   const scope = buildServerScopeCondition("ServerID", input);
   const playerScope = buildServerScopeCondition("tsp.ServerID", input);
   const hasAllServersScope = (input.serverIds?.length ?? 0) > 0;
-  // Players on several servers count once: tbl_server_player has one row per
-  // player and server.
   const statsQuery = pool.query<ServerDetailStatsRow[]>(
     hasAllServersScope
       ? `
@@ -145,8 +141,7 @@ export async function getServerDetailStats(
       `,
     hasAllServersScope ? [...playerScope.params, ...scope.params] : scope.params
   );
-  // Rounds played, as on the maps page: tbl_mapstats has a row per round,
-  // while tbl_server_stats.SumRounds adds up every player's rounds.
+  // Not tbl_server_stats.SumRounds, which adds up every player's rounds.
   const roundsQuery = pool.query<RoundCountRow[]>(
     `
       SELECT COUNT(*) AS totalRounds
@@ -223,14 +218,11 @@ export async function listRecentServerRounds(
   }));
 }
 
-// A day in any time zone overlaps at most two days on the logger's clock, so
-// the rounds of the latest 2n + 2 logger days with rounds hold at least n + 1
-// such days with rounds. Only the earliest of those can start before them.
+// A day in any time zone overlaps at most two days on the logger's clock.
 function loggerDateLimit(dayCount: number): number {
   return dayCount * 2 + 2;
 }
 
-// The days in `timeZone` that overlap the given days on the logger's clock.
 export function daysOverlapping(loggerDates: string[], timeZone: string): ZoneDay[] {
   const dates = new Set<string>();
 
@@ -253,7 +245,6 @@ export function daysOverlapping(loggerDates: string[], timeZone: string): ZoneDa
     }));
 }
 
-// The latest `limit` days in `timeZone` that had rounds.
 export async function listServerDailyPlayerTrend(
   input: ServerScopeInput,
   limit: number,
@@ -306,8 +297,7 @@ export async function listServerDailyPlayerTrend(
     [...days.flatMap((day) => [day.start, day.end, day.date]), ...scope.params, since]
   );
 
-  // A day that starts before `since` is missing its earlier rounds, unless the
-  // logger has none before `since`.
+  // A day that starts before `since` can miss rounds.
   const noEarlierRounds = dateRows.length < dateLimit;
   const completeDates = new Set(
     days.filter((day) => noEarlierRounds || day.start >= since).map((day) => day.date)

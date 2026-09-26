@@ -33,7 +33,6 @@ export type ServerPageScope = {
   server: ActiveServer;
 };
 
-// A section page shows either every server the site lists or one of them.
 export type PageScope = AllServersPageScope | ServerPageScope;
 
 type HrefQuery = Record<string, string | number | null | undefined>;
@@ -78,7 +77,6 @@ export function scopeName(scope: PageScope): string {
   return scope.kind === "all" ? "All Servers" : scope.server.serverName;
 }
 
-// The server that player links and searches stay on; null for all servers.
 export function scopeServerId(scope: PageScope): number | null {
   return scope.kind === "all" ? null : scope.server.serverId;
 }
@@ -102,7 +100,6 @@ export function nextOrder<TSort extends string>(
   return order === "asc" ? "desc" : "asc";
 }
 
-// The request's query, to keep through a redirect.
 function searchParamsQuery(searchParams: SearchParams): string {
   const params = new URLSearchParams();
 
@@ -115,8 +112,6 @@ function searchParamsQuery(searchParams: SearchParams): string {
   return params.toString();
 }
 
-// With a single listed server, all-servers pages redirect to its page, with
-// the same query.
 export async function getAllServersPageScope(
   section: ServerSection,
   searchParams: SearchParams = {}

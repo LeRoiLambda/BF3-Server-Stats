@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-// Pages show live database data: they render on every request, and the build
-// never connects to the database.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

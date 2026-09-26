@@ -24,7 +24,6 @@ import type { ActiveServer } from "@/src/server/repositories/server-repository";
 
 type WeeklyLeaderboardSectionProps = Readonly<{
   result: WeeklyLeaderboardResult;
-  // The listed servers, to name those left out of the ranking.
   servers: ActiveServer[];
   fullLeadersHref: string;
   serverId?: number | null;
@@ -278,7 +277,6 @@ function WeeklyLeaderboardTable({
 
 const serverNameList = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
-// Names the servers a ranking leaves out because they save no sessions.
 export function WeeklyUnrankedServersNote({
   result,
   servers

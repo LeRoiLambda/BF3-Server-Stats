@@ -13,16 +13,12 @@ import {
 
 export type ChatChannelTone = "global" | "team" | "squad" | "other";
 
-// A chat message as the transcript shows it, with its times on the site's
-// clock and its links, so pages and /api/chat hand the browser the same shape.
 export type ChatMessageView = {
   id: number;
-  // Set on pages that list several servers.
   serverName: string | null;
   channel: string | null;
   channelTone: ChatChannelTone;
   speaker: string;
-  // Said by the game server, such as admin announcements.
   fromServer: boolean;
   playerId: number | null;
   playerHref: string | null;
@@ -31,20 +27,16 @@ export type ChatMessageView = {
   text: string;
   sentAt: {
     iso: string;
-    // "YYYY-MM-DD" and "Thursday, September 24, 2026" on the site's clock.
     day: string;
     dayLabel: string;
-    // "21:04:31", and "2026-09-24 21:04:31 PDT" for its tooltip.
     clock: string;
     label: string;
   } | null;
-  // The message among the whole conversation on its server.
   contextHref: string;
 };
 
 export type ChatMessageViewScope = {
   showServer: boolean;
-  // The server that player links stay on; null for all servers.
   serverId: number | null;
 };
 
@@ -66,7 +58,6 @@ function dayLabel(instant: Date, timeZone: string): string {
   return format.format(instant);
 }
 
-// "Thursday, September 24, 2026" for "2026-09-24".
 export function formatChatDay(date: string): string {
   const [year, month, day] = date.split("-").map(Number);
   return dayLabel(new Date(Date.UTC(year, month - 1, day)), "UTC");

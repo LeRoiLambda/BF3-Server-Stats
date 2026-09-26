@@ -1,9 +1,4 @@
-// Serves the standalone build as `next start` would: it loads the same .env
-// files (.env.production.local, .env.local, .env.production and .env) and
-// takes its -H/--hostname, -p/--port and --keepAliveTimeout options. Without
-// -H it listens on every IPv4 interface, 0.0.0.0; -H :: adds IPv6. The
-// standalone server reads the address from HOSTNAME, which shells and
-// containers often set to the machine's name, so it is set here.
+// The standalone server listens on HOSTNAME, which shells and containers set to the machine's name.
 import { parseArgs } from "node:util";
 import nextEnv from "@next/env";
 

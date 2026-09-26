@@ -63,9 +63,7 @@ export async function listServerCountryBreakdown(
 ): Promise<CountryBreakdown[]> {
   const pool = getDbPool();
   const scope = buildServerScopeCondition("tsp.ServerID", input);
-  // Only region codes, which normalizeCountryCode() accepts, get a tab: the
-  // logger's "--" for unknown and GeoIP pseudo-codes such as "A1" (anonymous
-  // proxy) name no country.
+  // "--" and GeoIP pseudo-codes such as "A1" name no country.
   const [rows] = await pool.query<CountryBreakdownRow[]>(
     `
       SELECT

@@ -12,25 +12,17 @@ import { ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 
 export type ChatTranscriptPage = {
-  // Newest first.
   messages: ChatMessageView[];
   hasOlder: boolean;
   hasNewer: boolean;
-  // The chat log's highest id when the page was read: new messages come after
-  // it, however far back the last matching message is.
   latestLoggedId: number;
 };
 
 type ChatTranscriptProps = Readonly<{
   initial: ChatTranscriptPage;
-  // The message the page links to, highlighted and scrolled into view.
   anchorId: number | null;
-  // What the page's URL shows instead of the latest messages, such as
-  // "Messages up to 21:59 on Thursday, September 25, 2026"; null for the
-  // latest messages.
   positionLabel: string | null;
   terms: string[];
-  // The page's path and filter query; apiQuery adds the server for /api/chat.
   pagePath: string;
   filterQuery: string;
   apiQuery: string;
@@ -41,16 +33,10 @@ type ChatTranscriptProps = Readonly<{
 
 type LoadKind = "older" | "newer" | "follow" | "latest";
 
-// New messages are checked for this often while the latest ones are shown.
 const FOLLOW_INTERVAL_MS = 10_000;
-// Checks for new messages start up to this many ids before the last one seen,
-// in case a lower id is committed after a higher one.
+// Ids can be committed out of order.
 const FOLLOW_OVERLAP_IDS = 20;
-// The top of the messages scrolled at most this far out of view still counts
-// as reading the newest ones.
 const TOP_SLACK_PX = 64;
-// While new messages are added at the top, the oldest beyond this many are
-// dropped from the page.
 const MAX_SHOWN_MESSAGES = 500;
 
 const CHANNEL_TONE_CLASSES: Record<ChatChannelTone, string> = {
@@ -138,8 +124,6 @@ type ChatMessageRowProps = Readonly<{
 }>;
 
 function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMessageRowProps) {
-  // Narrow screens run the time, channel, speaker and text together and wrap
-  // them; wider ones give the time a column of its own.
   return (
     <li
       id={`message-${message.id}`}
@@ -206,7 +190,6 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
   );
 }
 
-// `added` is newest first.
 function newMessageAnnouncement(added: ChatMessageView[]): string {
   const newest = added[0];
   const from = `${newest.speaker || "Unknown"}: ${newest.text}`;
@@ -215,12 +198,6 @@ function newMessageAnnouncement(added: ChatMessageView[]): string {
     : `${added.length} new messages, the newest from ${from}`;
 }
 
-// The chat log, newest message first. It opens at the latest messages, or
-// where the page's URL points, and loads older messages as the reader
-// scrolls down. While the latest messages are shown it checks for new ones:
-// they appear at the top while the reader is there, and wait behind a button
-// while the reader is further down. Loads run one at a time, in the order
-// they were asked for.
 export function ChatTranscript({
   initial,
   anchorId,
@@ -236,8 +213,6 @@ export function ChatTranscript({
   const [messages, setMessages] = useState(initial.messages);
   const [hasOlder, setHasOlder] = useState(initial.hasOlder);
   const [hasNewer, setHasNewer] = useState(initial.hasNewer);
-  // New messages that arrived while the reader was away from the top, newest
-  // first; `overflow` when more arrived than one load holds.
   const [waiting, setWaiting] = useState<{ messages: ChatMessageView[]; overflow: boolean }>({
     messages: [],
     overflow: false
@@ -250,12 +225,9 @@ export function ChatTranscript({
   const messagesRef = useRef(messages);
   const waitingRef = useRef(waiting);
   const atTopRef = useRef(anchorId === null);
-  // New messages are asked for after this id.
   const followAfterRef = useRef(
     Math.max(initial.latestLoggedId, initial.messages[0]?.id ?? 0)
   );
-  // Set before newer messages are added above the shown ones: keep this
-  // message where it is on the screen.
   const keepInPlaceRef = useRef<{ id: number; top: number } | null>(null);
   const scrollToTopRef = useRef(false);
   const queueRef = useRef<LoadKind[]>([]);
@@ -282,7 +254,6 @@ export function ChatTranscript({
     return page.messages.filter((message) => !known.has(message.id));
   }, []);
 
-  // Adds messages above the shown ones, dropping the oldest beyond the limit.
   const addNewest = useCallback(
     (added: ChatMessageView[]) => {
       let next = [...added, ...messagesRef.current];
@@ -295,7 +266,6 @@ export function ChatTranscript({
     [showMessages]
   );
 
-  // Everything up to the page's newest message, or the log's, has been read.
   const followPast = useCallback((page: ChatTranscriptPage) => {
     followAfterRef.current = Math.max(
       followAfterRef.current,
@@ -339,8 +309,6 @@ export function ChatTranscript({
   }, [apiQuery, followPast, showMessages, unknownMessages]);
 
   const follow = useCallback(async () => {
-    // The overlap stays within the shown messages: an empty transcript has
-    // nothing to fill in, so it asks only for what is new.
     const oldest = messagesRef.current.at(-1);
     const overlapFloor = oldest ? oldest.id - 1 : followAfterRef.current;
     const page = await fetchPage(apiQuery, {
@@ -348,8 +316,6 @@ export function ChatTranscript({
     });
     const added = unknownMessages(page);
 
-    // More arrived than one load holds: a reader at the top moves on to the
-    // latest messages; one further down gets them from the button.
     if (page.hasNewer) {
       if (atTopRef.current) {
         await loadLatest();
@@ -386,9 +352,6 @@ export function ChatTranscript({
     loadersRef.current = loaders;
   });
 
-  // Runs the queued loads one after another. A failed load stops the queue
-  // until the reader tries again; a failed check for new messages is retried
-  // at the next one.
   const drain = useCallback(async () => {
     if (drainingRef.current) {
       return;
@@ -428,7 +391,6 @@ export function ChatTranscript({
     [drain]
   );
 
-  // Shows the messages waiting behind the button, at the top.
   const showWaiting = useCallback(() => {
     if (waitingRef.current.overflow) {
       request("latest");
@@ -439,8 +401,6 @@ export function ChatTranscript({
     setWaitingMessages({ messages: [], overflow: false });
   }, [addNewest, request, setWaitingMessages]);
 
-  // Opens at the linked message, centered, once the router has placed the
-  // page.
   useEffect(() => {
     if (anchorId === null) {
       return;
@@ -469,8 +429,6 @@ export function ChatTranscript({
     }
   }, [messages]);
 
-  // Tracks whether the reader is at the newest messages, and shows the
-  // waiting ones when they scroll back up to them.
   useEffect(() => {
     const update = () => {
       const top = topRef.current;
@@ -504,9 +462,6 @@ export function ChatTranscript({
     };
   }, [hasNewer, request, waiting.overflow]);
 
-  // Loads older messages as the end of the list scrolls near. Observing
-  // again after each load keeps loading while the end stays in view, as in a
-  // short log.
   useEffect(() => {
     const older = hasOlder ? olderRef.current : null;
     if (!older || failed) {
@@ -592,9 +547,6 @@ export function ChatTranscript({
         </button>
       ) : null}
 
-      {/* The browser keeps no scroll anchor in here: messages added below
-          the reader must not move them, and those added above are placed
-          by keepInPlaceRef. */}
       <div className="rounded-sm border border-slate-600/35 bg-slate-950/60 [overflow-anchor:none]">
         {hasNewer && newest ? (
           <div className="flex justify-center border-b border-slate-800/70 py-3">

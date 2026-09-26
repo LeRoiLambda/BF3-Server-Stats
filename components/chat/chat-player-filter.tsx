@@ -12,8 +12,6 @@ type ChatPlayerFilterProps = Readonly<{
   filterQuery: string;
 }>;
 
-// Picks the player whose messages the chat shows. Suggestions come from every
-// listed server: a player can chat on a server before their first stats there.
 export function ChatPlayerFilter({ pagePath, filterQuery }: ChatPlayerFilterProps) {
   const router = useRouter();
   const showPlayer = useCallback(

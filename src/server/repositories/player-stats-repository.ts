@@ -45,11 +45,9 @@ export type LeaderboardResult = {
 };
 
 export type WeeklyLeaderboardResult = {
-  // False when none of the servers has session history.
   available: boolean;
   players: LeaderboardPlayer[];
   resetAt: string;
-  // Servers left out of the ranking because they have no session history.
   serverIdsWithoutSessions: number[];
 };
 
@@ -104,8 +102,6 @@ async function hasAdkatsBansTable(): Promise<boolean> {
   return hasTable("adkats_bans");
 }
 
-// The site's week, from Monday 00:00 to the next, on the logger's clock,
-// which session start times are on.
 function currentWeekWindow(): {
   startSql: string;
   endSql: string;
@@ -202,8 +198,6 @@ export function parseCurrentPlayerOrder(value: string | null): CurrentPlayerOrde
   return normalizeCurrentPlayerOrder(value);
 }
 
-// A tbl_playerstats column: summed across a player's servers, or as stored
-// when the board shows one server, where each player has a single row.
 type StatSql = (column: string) => string;
 
 function leaderboardStatSql(aggregate: boolean): StatSql {
@@ -254,9 +248,6 @@ function toLeaderboardPlayer(row: PlayerRow): LeaderboardPlayer {
   };
 }
 
-// The overall leaderboard of the given servers. A player's stats on several
-// servers are summed; one server reads them without grouping, which costs
-// less on large servers.
 export async function getLeaderboard(input: LeaderboardQueryInput): Promise<LeaderboardResult> {
   const serverIds = Array.from(
     new Set(input.serverIds.filter((serverId) => Number.isInteger(serverId) && serverId > 0))
@@ -347,8 +338,6 @@ export async function getLeaderboard(input: LeaderboardQueryInput): Promise<Lead
   };
 }
 
-// The week's top players on the given servers, from their completed sessions:
-// a session row covers a whole visit and is written when the player leaves.
 export async function getWeeklyLeaderboard(input: {
   serverIds: number[];
   gameId: number;
@@ -427,9 +416,6 @@ export async function listCurrentPlayersByServer(input: {
   const orderSql = order.toUpperCase();
   const adkatsAvailable = await hasAdkatsBansTable();
 
-  // Names are matched across the game, as in chat: a player known from another
-  // server links to their profile before their first stats here, which the
-  // logger writes at the next map load. Players new to the game stay unlinked.
   const [rows] = await pool.query<CurrentPlayerRow[]>(
     `
       SELECT

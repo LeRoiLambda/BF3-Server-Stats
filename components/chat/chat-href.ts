@@ -1,9 +1,5 @@
-// Query strings and links for the chat page, shared by the page and the
-// transcript that loads more messages in the browser.
-
 export type ChatQueryValues = Record<string, string | null>;
 
-// The non-empty values as a query string.
 export function chatQuery(values: ChatQueryValues): string {
   const params = new URLSearchParams();
 
@@ -16,8 +12,6 @@ export function chatQuery(values: ChatQueryValues): string {
   return params.toString();
 }
 
-// `path` with `query`, after applying `changes`; null or empty removes a
-// parameter.
 export function chatHref(path: string, query: string, changes: ChatQueryValues = {}): string {
   const params = new URLSearchParams(query);
 

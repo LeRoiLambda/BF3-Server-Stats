@@ -78,8 +78,6 @@ export type PlayerModerationSummary = {
   recentActions: ModerationAction[];
 };
 
-// activeServerIds are the servers the site lists; AdKats settings, mutes and
-// recent actions come only from those.
 export type PlayerModerationInput = {
   playerId: number;
   serverId: number | null;
@@ -301,7 +299,6 @@ function placeholders(count: number): string {
   return Array.from({ length: count }, () => "?").join(", ");
 }
 
-// Records from the server shown, or from every server the site lists.
 function recordServerScope(input: PlayerModerationInput): ServerScopeCondition {
   return buildServerScopeCondition(
     "r.server_id",
@@ -371,7 +368,6 @@ async function getCurrentStatus(
 
   const detail = row.recordMessage || row.banNotes || null;
   const banDuration = banDurationFromRow(row);
-  // AdKats writes ban times in UTC.
   if (row.banStatus === "Active") {
     return {
       kind: "activeBan",
@@ -411,7 +407,6 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
   }
 
   const durationMinutes = Number(row.commandNumeric ?? 0);
-  // AdKats writes record_time in UTC.
   const startedAt = parseUtcDateTime(row.recordTime);
   if (!startedAt || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     return DEFAULT_MUTE_STATUS;
@@ -517,8 +512,6 @@ async function getCurrentMuteStatus(
   return buildMuteStatus(rows[0]);
 }
 
-// Settings of every listed server; selectSettings() picks the shown server's,
-// or else those of the listed server with the lowest id that has any.
 async function listSettingsRows(
   activeServerIds: number[],
   availability: ModerationAvailability
@@ -676,8 +669,7 @@ function buildLadder(
     return null;
   }
 
-  // As in AdKats: a negative total counts as zero, and totals past the end of
-  // the ladder stay on the last step.
+  // As in AdKats: negative totals count as zero, and totals past the ladder's end stay on its last step.
   const nextIndex =
     key === "punishment" && totalPoints !== null
       ? Math.min(Math.max(Math.floor(totalPoints), 0), tokens.length - 1)

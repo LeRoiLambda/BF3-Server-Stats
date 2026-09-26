@@ -58,7 +58,6 @@ export function StatsShell({
   const battlelogHref = currentServer
     ? battlelogServerSearchHref(currentServer.serverName)
     : null;
-  // Links to a section of the scope shown: the current server, or all.
   const sectionHref = (section: ServerSection) =>
     hasServerScope ? serverSectionHref(currentServerId, section) : allServersHref(section);
   const defaultScopeOptions = [

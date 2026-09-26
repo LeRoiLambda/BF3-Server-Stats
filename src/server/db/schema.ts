@@ -1,9 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 
-// Schema and data availability checks are cached for a minute, so optional
-// tables that are added or dropped while the app runs (such as AdKats') are
-// picked up.
+// Cached for a minute, so tables added while the app runs are picked up.
 const SCHEMA_CACHE_TTL_MS = 60_000;
 
 type CachedSchemaFlag = {
@@ -84,9 +82,6 @@ export async function hasColumn(
   );
 }
 
-// Whether the server has saved sessions. The stats logger saves them only
-// when its "Session ON?" and "Save Sessiondata to DB?" settings are on, and
-// each server's Procon layer has its own settings.
 export async function hasServerSessions(serverId: number): Promise<boolean> {
   if (!(await hasTable("tbl_sessions"))) {
     return false;

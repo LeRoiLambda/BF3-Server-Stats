@@ -13,7 +13,6 @@ type PlayerPickerFormProps = {
   className?: string;
   inputClassName: string;
   inputWrapperClassName?: string;
-  // Without a button, Enter submits the typed name.
   buttonLabel?: string;
   buttonClassName?: string;
   onPick: (player: PlayerAutocompleteSuggestion) => void;
@@ -27,8 +26,6 @@ function sameName(left: string, right: string): boolean {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
-// A player name field with suggestions. Choosing a suggestion, or submitting
-// a name that matches one player, picks that player.
 export function PlayerPickerForm({
   serverId,
   placeholder,

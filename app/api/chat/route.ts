@@ -8,9 +8,6 @@ import { siteTimeZone } from "@/src/server/utils/site-time";
 
 export const revalidate = 0;
 
-// The chat page's messages, newest first, for loading older or newer ones in
-// place and for following new ones: the same filters as the page (q, player,
-// channel), sid for one server, and before or after a message id.
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   const context = await getServerContext();

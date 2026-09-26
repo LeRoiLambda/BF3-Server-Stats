@@ -28,7 +28,6 @@ type ChatSectionProps = {
   searchParams: SearchParams;
 };
 
-// Opening the page at another position shows a new transcript.
 function positionKey(position: ChatPosition): string {
   switch (position.kind) {
     case "latest":
@@ -82,7 +81,6 @@ function emptyLabel(params: ChatParams, filtered: boolean, timeZone: string): st
   }
 }
 
-// What the page shows instead of the latest messages; null for those.
 function positionLabel(params: ChatParams, timeZone: string): string | null {
   switch (params.position.kind) {
     case "latest":

@@ -26,7 +26,6 @@ export type ChatMessage = {
   playerId: number | null;
   countryCode: string | null;
   banStatus: "active" | "expired" | null;
-  // tbl_chatlog.logSubset: "Global", "Team" or "Squad".
   subset: string | null;
   text: string;
 };
@@ -41,19 +40,14 @@ export type ChatLogInput = {
   size: number;
 };
 
-// A run of consecutive matching messages, newest first.
 export type ChatLog = {
-  // The player whose messages are shown, when the filter names one that exists.
   player: ChatPlayer | null;
   messages: ChatMessage[];
   hasOlder: boolean;
   hasNewer: boolean;
-  // The chat log's highest id before the messages were read. New messages
-  // matching the filters come after it, however far back the last match is.
   latestLoggedId: number;
 };
 
-// Ids of consecutive matching messages, newest first.
 export type ChatWindow = {
   ids: number[];
   hasOlder: boolean;
@@ -107,9 +101,6 @@ const CHANNEL_SUBSETS: Record<ChatChannel, string> = {
 
 const EMPTY_WINDOW: ChatWindow = { ids: [], hasOlder: false, hasNewer: false };
 
-// Splits `size` messages between those before an anchor and the anchor with
-// those after it, half each where both sides have enough. `older` is newest
-// first and `newer` oldest first, each fetched `size + 1` deep.
 export function centerChatWindow(older: number[], newer: number[], size: number): ChatWindow {
   const half = Math.floor(size / 2);
   const newerCount = Math.min(newer.length, size - Math.min(older.length, half));
@@ -122,9 +113,7 @@ export function centerChatWindow(older: number[], newer: number[], size: number)
   };
 }
 
-// The stored value for `instant` in tbl_chatlog.logDate. AdKats writes the
-// chat log in UTC on servers where its "Post Stat Logger Chat Manually"
-// setting is on; the stats logger writes it on its own clock elsewhere.
+// AdKats writes the chat log in UTC where its "Post Stat Logger Chat Manually" setting is on.
 export function chatLogTime(instant: Date, postedByAdkats: boolean): string {
   return postedByAdkats
     ? formatSqlDateTime(naiveDateToWallClock(instant))
@@ -143,9 +132,6 @@ async function readLatestLoggedId(): Promise<number> {
   return Number(rows[0]?.id ?? 0);
 }
 
-// The servers, among `serverIds`, whose chat log AdKats writes. The setting's
-// current value applies to all of a server's chat, including lines written
-// before it changed.
 async function listAdkatsChatServerIds(serverIds: number[]): Promise<Set<number>> {
   if (serverIds.length === 0 || !(await hasTable("adkats_settings"))) {
     return new Set();
@@ -194,9 +180,6 @@ export async function getChatPlayer(
     : null;
 }
 
-// Messages from a player carry their id in logPlayerID, which only AdKats
-// adds and fills. Lines without one are matched by the speaker's name, as
-// when they are shown.
 async function messageFilter(input: ChatLogInput, player: ChatPlayer | null): Promise<Condition> {
   const scope = buildServerScopeCondition("cl.ServerID", { serverIds: input.serverIds });
   const parts = [scope.sql];
@@ -226,8 +209,6 @@ async function messageFilter(input: ChatLogInput, player: ChatPlayer | null): Pr
   return { sql: parts.join(" AND "), params };
 }
 
-// Ids of matching messages past `bound`, walking the log newest first (DESC)
-// or oldest first (ASC). Ids follow the order messages were logged in.
 async function selectMessageIds(
   filter: Condition,
   bound: Condition | null,
@@ -283,9 +264,6 @@ async function selectWindowAround(
   return centerChatWindow(older, newer, size);
 }
 
-// The first matching message sent at or after `instant`. Each server's
-// logDate is read on the clock its chat log is written with, so servers whose
-// chat AdKats writes are searched apart from the others.
 async function firstMessageIdSince(
   filter: Condition,
   instant: Date,
@@ -343,7 +321,6 @@ async function loadMessages(
     hasTable("adkats_bans"),
     hasColumn("tbl_chatlog", "logPlayerID")
   ]);
-  // Server messages and speakers without a player record keep a null player.
   const namedPlayerIdSql = `(
     SELECT MIN(p.PlayerID)
     FROM tbl_playerdata p
@@ -410,8 +387,6 @@ async function loadMessages(
   });
 }
 
-// Reads `size` consecutive messages that match the filters, at the position
-// asked for, newest first in the order they were logged.
 export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
   const latestLoggedId = await readLatestLoggedId();
   const player =
@@ -453,8 +428,6 @@ export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
       chatWindow = await selectWindowAround(filter, position.messageId, size);
       break;
     case "until": {
-      // The messages logged before the first one sent since the day's or
-      // hour's end.
       const sinceId = await firstMessageIdSince(
         filter,
         position.end,
