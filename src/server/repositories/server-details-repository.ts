@@ -103,6 +103,8 @@ export async function getServerDetailStats(
   const scope = buildServerScopeCondition("ServerID", scopeInput);
   const playerScope = buildServerScopeCondition("tsp.ServerID", scopeInput);
   const hasAllServersScope = (scopeInput.serverIds?.length ?? 0) > 0;
+  // Players on several servers count once: tbl_server_player has one row per
+  // player and server.
   const statsQuery = pool.query<ServerDetailStatsRow[]>(
     hasAllServersScope
       ? `
@@ -122,7 +124,6 @@ export async function getServerDetailStats(
         CROSS JOIN (
           SELECT COUNT(DISTINCT tsp.PlayerID) AS countPlayers
           FROM tbl_server_player tsp
-          INNER JOIN tbl_playerstats tps ON tps.StatsID = tsp.StatsID
           WHERE ${playerScope.sql}
         ) players
         WHERE ${scope.sql}
