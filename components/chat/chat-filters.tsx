@@ -1,6 +1,7 @@
 import Form from "next/form";
 import Link from "next/link";
 import { chatHref, type ChatQueryValues } from "@/components/chat/chat-href";
+import { ChatJump } from "@/components/chat/chat-jump";
 import { ChatPlayerFilter } from "@/components/chat/chat-player-filter";
 import { SegmentedNav } from "@/components/layout/segmented-nav";
 import { ui } from "@/components/layout/stats-ui";
@@ -24,11 +25,6 @@ const CHANNEL_LABELS = {
   squad: "Squad"
 } as const;
 
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-
-const jumpFieldClass =
-  "h-9 rounded-sm border border-slate-600 bg-slate-950/85 px-2 text-sm text-slate-100 [color-scheme:dark] focus:border-slate-400 focus:outline-none";
-
 function HiddenFields({ values }: Readonly<{ values: ChatQueryValues }>) {
   return Object.entries(values).map(([name, value]) =>
     value ? <input key={name} type="hidden" name={name} value={value} /> : null
@@ -46,8 +42,6 @@ export function ChatFilters({
 }: ChatFiltersProps) {
   const positioned = params.position.kind !== "latest";
   const filtered = params.text !== "" || params.playerId !== null || params.channel !== null;
-  const jumpDate = jump.date;
-  const jumpHour = jump.hour;
 
   return (
     <div className="mb-4 grid gap-3">
@@ -119,40 +113,15 @@ export function ChatFilters({
           ]}
         />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Form
-            key={`day:${jumpDate}:${jumpHour}`}
-            action={pagePath}
-            className="flex flex-wrap items-center gap-2"
-          >
-            <HiddenFields values={filterValues} />
-            <label
-              htmlFor="chat-jump-date"
-              className="w-full whitespace-nowrap text-[11px] font-medium uppercase tracking-wide text-slate-400 sm:w-auto"
-            >
-              Jump to
-            </label>
-            <input
-              id="chat-jump-date"
-              type="date"
-              name="date"
-              required
-              max={today}
-              defaultValue={jumpDate}
-              className={`${jumpFieldClass} min-w-0 flex-1 sm:flex-none`}
-            />
-            <select name="hour" aria-label="Hour" defaultValue={jumpHour} className={jumpFieldClass}>
-              <option value="">Whole day</option>
-              {HOURS.map((hour) => (
-                <option key={hour} value={String(hour)}>
-                  {`${String(hour).padStart(2, "0")}:00`}
-                </option>
-              ))}
-            </select>
-            <button type="submit" className={ui.buttonGhost}>
-              Go
-            </button>
-          </Form>
+        <div className="flex items-center gap-2">
+          <ChatJump
+            key={`${jump.date}:${jump.hour}`}
+            pagePath={pagePath}
+            filterQuery={filterQuery}
+            today={today}
+            date={jump.date}
+            hour={jump.hour}
+          />
           {filtered || positioned ? (
             <Link href={pagePath} className={ui.buttonGhost}>
               Reset
