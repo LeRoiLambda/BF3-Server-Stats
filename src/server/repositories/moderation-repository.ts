@@ -1,7 +1,10 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
-import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
+import {
+  buildServerScopeCondition,
+  type ServerScopeCondition
+} from "@/src/server/repositories/server-scope";
 import { parseUtcDateTime } from "@/src/server/utils/time-zones";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
@@ -75,8 +78,8 @@ export type PlayerModerationSummary = {
   recentActions: ModerationAction[];
 };
 
-// activeServerIds are the servers the site lists; AdKats settings come only
-// from those.
+// activeServerIds are the servers the site lists; AdKats settings, mutes and
+// recent actions come only from those.
 export type PlayerModerationInput = {
   playerId: number;
   serverId: number | null;
@@ -298,6 +301,14 @@ function placeholders(count: number): string {
   return Array.from({ length: count }, () => "?").join(", ");
 }
 
+// Records from the server shown, or from every server the site lists.
+function recordServerScope(input: PlayerModerationInput): ServerScopeCondition {
+  return buildServerScopeCondition(
+    "r.server_id",
+    input.serverId === null ? { serverIds: input.activeServerIds } : { serverId: input.serverId }
+  );
+}
+
 async function getCurrentStatus(
   playerId: number,
   availability: ModerationAvailability
@@ -445,8 +456,7 @@ async function getCurrentMuteStatus(
   }
 
   const pool = getDbPool();
-  const serverCondition = input.serverId === null ? "" : "AND r.server_id = ?";
-  const serverParams = input.serverId === null ? [] : [input.serverId];
+  const scope = recordServerScope(input);
 
   if (availability.commands) {
     const [rows] = await pool.query<RecordRow[]>(
@@ -466,7 +476,7 @@ async function getCurrentMuteStatus(
         FROM adkats_records_main r
         LEFT JOIN adkats_commands action_cmd ON action_cmd.command_id = r.command_action
         WHERE r.target_id = ?
-          ${serverCondition}
+          AND ${scope.sql}
           AND (r.source_id IS NULL OR r.source_id <> r.target_id)
           AND (
             action_cmd.command_text IN ('mute', 'unmute')
@@ -475,7 +485,7 @@ async function getCurrentMuteStatus(
         ORDER BY r.record_time DESC, r.record_id DESC
         LIMIT 1
       `,
-      [input.playerId, ...serverParams]
+      [input.playerId, ...scope.params]
     );
 
     return buildMuteStatus(rows[0]);
@@ -495,13 +505,13 @@ async function getCurrentMuteStatus(
         r.record_time AS recordTime
       FROM adkats_records_main r
       WHERE r.target_id = ?
-        ${serverCondition}
+        AND ${scope.sql}
         AND (r.source_id IS NULL OR r.source_id <> r.target_id)
         AND r.command_action IN (11, 146)
       ORDER BY r.record_time DESC, r.record_id DESC
       LIMIT 1
     `,
-    [input.playerId, ...serverParams]
+    [input.playerId, ...scope.params]
   );
 
   return buildMuteStatus(rows[0]);
@@ -930,8 +940,7 @@ async function listRecentActions(
 
   const pool = getDbPool();
   const limit = Math.max(1, Math.min(20, Math.floor(input.recentLimit ?? 8)));
-  const serverCondition = input.serverId === null ? "" : "AND r.server_id = ?";
-  const serverParams = input.serverId === null ? [] : [input.serverId];
+  const scope = recordServerScope(input);
 
   if (availability.commands) {
     const textSql = placeholders(MODERATION_COMMAND_TEXTS.length);
@@ -963,7 +972,7 @@ async function listRecentActions(
         LEFT JOIN adkats_commands type_cmd ON type_cmd.command_id = r.command_type
         LEFT JOIN adkats_commands action_cmd ON action_cmd.command_id = r.command_action
         WHERE r.target_id = ?
-          ${serverCondition}
+          AND ${scope.sql}
           AND (r.source_id IS NULL OR r.source_id <> r.target_id)
           AND (
             LOWER(type_cmd.command_text) IN (${textSql})
@@ -976,7 +985,7 @@ async function listRecentActions(
       `,
       [
         input.playerId,
-        ...serverParams,
+        ...scope.params,
         ...MODERATION_COMMAND_TEXTS,
         ...MODERATION_COMMAND_TEXTS,
         ...MODERATION_COMMAND_KEY_PATTERNS,
@@ -1003,7 +1012,7 @@ async function listRecentActions(
         r.record_time AS recordTime
       FROM adkats_records_main r
       WHERE r.target_id = ?
-        ${serverCondition}
+        AND ${scope.sql}
         AND (r.source_id IS NULL OR r.source_id <> r.target_id)
         AND (
           r.command_type IN (${idSql})
@@ -1014,7 +1023,7 @@ async function listRecentActions(
     `,
     [
       input.playerId,
-      ...serverParams,
+      ...scope.params,
       ...MODERATION_COMMAND_IDS,
       ...MODERATION_COMMAND_IDS,
       limit
