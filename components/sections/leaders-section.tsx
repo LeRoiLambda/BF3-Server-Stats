@@ -103,6 +103,8 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
               <PlayerAutocompleteInput
                 name="q"
                 placeholder="Search player..."
+                label="Search player"
+                submitOnPick
                 defaultValue={search ?? ""}
                 serverId={serverId}
                 className={ui.input}

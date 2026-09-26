@@ -15,7 +15,9 @@ type RootLayoutProps = Readonly<{
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="relative">
+        <div className="isolate">{children}</div>
+      </body>
     </html>
   );
 }

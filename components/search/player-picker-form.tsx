@@ -106,6 +106,8 @@ export function PlayerPickerForm({
       <PlayerAutocompleteInput
         name="name"
         placeholder={placeholder}
+        label={placeholder.replace(/\.+$/, "")}
+        pickOnEnter
         serverId={serverId}
         onSuggestionsChange={handleSuggestionsChange}
         onSuggestionSelect={pick}
