@@ -79,8 +79,8 @@ export function StatsShell({
 
   return (
     <main className={ui.pageContainer}>
-      <header className="stats-panel overflow-visible rounded-sm">
-        <div className="rounded-t-sm border-b border-slate-600/35 bg-slate-950/90 px-4 py-4 sm:px-6">
+      <header className="stats-panel overflow-visible">
+        <div className="border-b border-slate-600/35 bg-slate-950/90 px-3 py-4 sm:rounded-t-sm sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <Link href={sectionHref("home")} className="inline-flex">
@@ -132,7 +132,7 @@ export function StatsShell({
           ) : null}
         </div>
 
-        <section className="rounded-b-sm bg-slate-950/70 px-4 py-3 sm:px-6">
+        <section className="bg-slate-950/70 px-3 py-3 sm:rounded-b-sm sm:px-6">
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <nav className="flex min-w-0 flex-wrap gap-1.5 xl:flex-nowrap">
               <Link

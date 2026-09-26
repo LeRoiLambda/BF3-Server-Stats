@@ -77,7 +77,7 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
     summary.nextStep?.label ?? (primaryLadder ? "Ladder complete" : "Unavailable");
 
   return (
-    <section className="stats-panel mt-6 min-w-0 rounded-sm p-4">
+    <section className="stats-panel mt-6 min-w-0 px-3 py-4 sm:p-4">
       <div className="mb-3">
         <h2 className={ui.sectionTitle}>Moderation Details</h2>
       </div>

@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 
 const panelBase =
-  "stats-panel min-w-0 rounded-sm p-5";
+  "stats-panel min-w-0 px-3 py-4 sm:p-5";
 
 const sectionCardBase =
   "rounded-sm border border-slate-600/35 bg-slate-950/70 p-4";
@@ -10,7 +10,7 @@ const tableShellBase =
   "w-full min-w-0 max-w-full overflow-x-auto rounded-sm border border-slate-600/35 bg-slate-950/60";
 
 export const ui = {
-  pageContainer: "mx-auto max-w-[1120px] px-3 py-6 sm:px-4 sm:py-8",
+  pageContainer: "mx-auto max-w-[1120px] sm:px-4 sm:py-8",
   panel: panelBase,
   card: sectionCardBase,
   cardCompact: `${sectionCardBase} p-3`,

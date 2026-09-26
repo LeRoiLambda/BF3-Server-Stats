@@ -95,7 +95,7 @@ function resolveHeaderStatus(
 
 function panelClass(kind: HeaderStatusKind): string {
   return clsx(
-    "stats-panel min-w-0 overflow-hidden rounded-sm",
+    "stats-panel min-w-0 overflow-hidden",
     kind === "activeBan"
       ? "border-rose-300/45"
       : kind === "expiredBan"
@@ -155,7 +155,7 @@ function podiumHeroClass(rank: WeeklyLeaderboardPodiumRank): string {
 
 function podiumPanelClass(rank: WeeklyLeaderboardPodiumRank): string {
   return clsx(
-    "stats-panel min-w-0 overflow-hidden rounded-sm",
+    "stats-panel min-w-0 overflow-hidden",
     rank === 1
       ? "border-amber-300/50"
       : rank === 2

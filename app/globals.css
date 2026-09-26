@@ -54,7 +54,7 @@
 
 @layer components {
   .stats-panel {
-    @apply border border-slate-500/35 bg-slate-950/70 shadow-[0_8px_20px_rgba(0,0,0,0.45)];
+    @apply bg-slate-950/70 sm:rounded-sm sm:border sm:border-slate-500/35 sm:shadow-[0_8px_20px_rgba(0,0,0,0.45)];
   }
 
   .stats-panel-muted {
