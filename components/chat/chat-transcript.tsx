@@ -26,7 +26,7 @@ type ChatTranscriptProps = Readonly<{
   // The message the page links to, highlighted and scrolled into view.
   anchorId: number | null;
   // What the page's URL shows instead of the latest messages, such as
-  // "Messages before 21:00 on Thursday, September 25, 2026"; null for the
+  // "Messages up to 21:59 on Thursday, September 25, 2026"; null for the
   // latest messages.
   positionLabel: string | null;
   terms: string[];

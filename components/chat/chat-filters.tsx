@@ -11,6 +11,9 @@ import { CHAT_CHANNELS, type ChatParams } from "@/src/server/routing/chat-params
 type ChatFiltersProps = Readonly<{
   params: ChatParams;
   player: ChatPlayer | null;
+  // Today's "YYYY-MM-DD" date on the site's clock, the latest day to jump to.
+  today: string;
+  jump: { date: string; hour: string };
   pagePath: string;
   // The filters as query values, and as a query string.
   filterValues: ChatQueryValues;
@@ -23,23 +26,32 @@ const CHANNEL_LABELS = {
   squad: "Squad"
 } as const;
 
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+const jumpFieldClass =
+  "h-9 rounded-sm border border-slate-600 bg-slate-950/85 px-2 text-sm text-slate-100 [color-scheme:dark] focus:border-slate-400 focus:outline-none";
+
 function HiddenFields({ values }: Readonly<{ values: ChatQueryValues }>) {
   return Object.entries(values).map(([name, value]) =>
     value ? <input key={name} type="hidden" name={name} value={value} /> : null
   );
 }
 
-// Filters narrow the messages (words, player, channel); "jump to" moves to a
-// date and time. Each keeps the others.
+// Filters narrow the messages (words, player, channel); "jump to" shows a
+// day, or an hour of it, from its end back. Each keeps the others.
 export function ChatFilters({
   params,
   player,
+  today,
+  jump,
   pagePath,
   filterValues,
   filterQuery
 }: ChatFiltersProps) {
   const positioned = params.position.kind !== "latest";
   const filtered = params.text !== "" || params.playerId !== null || params.channel !== null;
+  const jumpDate = jump.date;
+  const jumpHour = jump.hour;
 
   return (
     <div className="mb-4 grid gap-3">
@@ -112,22 +124,35 @@ export function ChatFilters({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <Form key={`at:${params.jumpTo}`} action={pagePath} className="flex items-center gap-2">
+          <Form
+            key={`day:${jumpDate}:${jumpHour}`}
+            action={pagePath}
+            className="flex flex-wrap items-center gap-2"
+          >
             <HiddenFields values={filterValues} />
             <label
-              htmlFor="chat-jump-to"
-              className="whitespace-nowrap text-[11px] font-medium uppercase tracking-wide text-slate-400"
+              htmlFor="chat-jump-date"
+              className="w-full whitespace-nowrap text-[11px] font-medium uppercase tracking-wide text-slate-400 sm:w-auto"
             >
               Jump to
             </label>
             <input
-              id="chat-jump-to"
-              type="datetime-local"
-              name="at"
+              id="chat-jump-date"
+              type="date"
+              name="date"
               required
-              defaultValue={params.jumpTo}
-              className="h-9 rounded-sm border border-slate-600 bg-slate-950/85 px-2 text-sm text-slate-100 [color-scheme:dark] focus:border-slate-400 focus:outline-none"
+              max={today}
+              defaultValue={jumpDate}
+              className={`${jumpFieldClass} min-w-0 flex-1 sm:flex-none`}
             />
+            <select name="hour" aria-label="Hour" defaultValue={jumpHour} className={jumpFieldClass}>
+              <option value="">Whole day</option>
+              {HOURS.map((hour) => (
+                <option key={hour} value={String(hour)}>
+                  {`${String(hour).padStart(2, "0")}:00`}
+                </option>
+              ))}
+            </select>
             <button type="submit" className={ui.buttonGhost}>
               Go
             </button>

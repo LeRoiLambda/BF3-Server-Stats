@@ -1,4 +1,8 @@
-import { parseSqlDateTime, wallClockToInstant } from "@/src/server/utils/time-zones";
+import {
+  dayStartInZone,
+  parseSqlDateTime,
+  wallClockToInstant
+} from "@/src/server/utils/time-zones";
 
 export type ChatChannel = "global" | "team" | "squad";
 
@@ -8,14 +12,20 @@ export const CHAT_CHANNELS: readonly ChatChannel[] = ["global", "team", "squad"]
 export const CHAT_PAGE_SIZE = 50;
 
 // Which messages of the chat log are shown: the latest ones, those before or
-// after a message, those around a message, or those sent before an instant,
-// as the chat stood then.
+// after a message, those around a message, or those of a day, or of an hour
+// of it, read back from its end: the messages sent before `end`.
 export type ChatPosition =
   | { kind: "latest" }
   | { kind: "before"; messageId: number }
   | { kind: "after"; messageId: number }
   | { kind: "around"; messageId: number }
-  | { kind: "at"; instant: Date };
+  | { kind: "until"; end: Date };
+
+// The "jump to" fields: a "YYYY-MM-DD" date and an hour of it, or "".
+export type ChatJump = {
+  date: string;
+  hour: string;
+};
 
 export type ChatFilters = {
   // The search field as typed, and the words and quoted phrases it asks for.
@@ -27,14 +37,14 @@ export type ChatFilters = {
 
 export type ChatParams = ChatFilters & {
   position: ChatPosition;
-  // The "jump to" field as typed: a date and time on the site's clock.
-  jumpTo: string;
+  jump: ChatJump;
 };
 
 const MAX_TERMS = 8;
 const MAX_TERM_LENGTH = 100;
 const ID_PATTERN = /^\d{1,15}$/;
-const JUMP_TO_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const HOUR_PATTERN = /^\d{1,2}$/;
 const TERM_PATTERN = /"([^"]*)"|(\S+)/g;
 
 // Every term must appear in a message, in any order: `ak 47` finds messages
@@ -74,27 +84,27 @@ function parsePositiveId(value: string | null): number | null {
   return id !== null && id > 0 ? id : null;
 }
 
-// "2026-09-25T21:00", as a datetime-local field sends it, or "2026-09-25",
-// read in `timeZone`. Years before 1970 or after 9998 are refused: the
-// logger's clock must stay within the database's DATETIME range.
-export function parseChatJumpTo(value: string, timeZone: string): Date | null {
-  const match = JUMP_TO_PATTERN.exec(value.trim());
-  if (!match) {
-    return null;
-  }
-
-  const [year, month, day, hour = "00", minute = "00", second = "00"] = match.slice(1);
-  const wallClock = parseSqlDateTime(`${year}-${month}-${day} ${hour}:${minute}:${second}`);
+// A day, "2026-09-25", and optionally an hour of it, 0 to 23, read in
+// `timeZone`: the chat from the end of that day or hour back. An hour it
+// cannot read stands for the whole day. Years before 1970 or after 9998 are
+// refused: the logger's clock must stay within the database's DATETIME range.
+export function parseChatDayEnd(date: string, hour: string, timeZone: string): Date | null {
+  const wallClock = DATE_PATTERN.test(date) ? parseSqlDateTime(`${date} 00:00:00`) : null;
   if (!wallClock || wallClock.year < 1970 || wallClock.year > 9998) {
     return null;
   }
 
-  return wallClockToInstant(wallClock, timeZone);
+  const hourNumber = HOUR_PATTERN.test(hour) ? Number(hour) : null;
+  const dayHour = hourNumber !== null && hourNumber <= 22 ? hourNumber : null;
+
+  return dayHour === null
+    ? dayStartInZone(date, timeZone, 1)
+    : wallClockToInstant({ ...wallClock, hour: dayHour + 1 }, timeZone);
 }
 
 function readPosition(
   get: (name: string) => string | null,
-  jumpTo: string,
+  jump: ChatJump,
   timeZone: string
 ): ChatPosition {
   const around = parsePositiveId(get("msg"));
@@ -102,9 +112,9 @@ function readPosition(
     return { kind: "around", messageId: around };
   }
 
-  const instant = jumpTo ? parseChatJumpTo(jumpTo, timeZone) : null;
-  if (instant) {
-    return { kind: "at", instant };
+  const end = jump.date ? parseChatDayEnd(jump.date, jump.hour, timeZone) : null;
+  if (end) {
+    return { kind: "until", end };
   }
 
   const before = parsePositiveId(get("before"));
@@ -121,22 +131,22 @@ function readPosition(
 }
 
 // Reads the chat page's query: q, player and channel filter the messages;
-// msg, at, before and after place them, in that order of precedence. Dates
-// and times are read in `timeZone`.
+// msg, date (with hour), before and after place them, in that order of
+// precedence. Days are read in `timeZone`.
 export function readChatParams(
   get: (name: string) => string | null,
   timeZone: string
 ): ChatParams {
   const text = get("q")?.trim() ?? "";
-  const jumpTo = get("at")?.trim() ?? "";
+  const jump = { date: get("date")?.trim() ?? "", hour: get("hour")?.trim() ?? "" };
 
   return {
     text,
     terms: parseChatTerms(text),
     playerId: parsePositiveId(get("player")),
     channel: parseChatChannel(get("channel")),
-    position: readPosition(get, jumpTo, timeZone),
-    jumpTo
+    position: readPosition(get, jump, timeZone),
+    jump
   };
 }
 

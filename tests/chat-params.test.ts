@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chatFilterQuery,
-  parseChatJumpTo,
+  parseChatDayEnd,
   parseChatTerms,
   readChatParams as readChatParamsIn
 } from "@/src/server/routing/chat-params";
@@ -32,26 +32,36 @@ describe("parseChatTerms", () => {
   });
 });
 
-describe("parseChatJumpTo", () => {
-  it("reads a date and time in the zone it is given", () => {
-    expect(parseChatJumpTo("2026-09-25T21:00", ZONE)?.toISOString()).toBe("2026-09-26T04:00:00.000Z");
-    expect(parseChatJumpTo("2026-09-25", ZONE)?.toISOString()).toBe("2026-09-25T07:00:00.000Z");
+describe("parseChatDayEnd", () => {
+  const end = (date: string, hour = "", zone = ZONE) => parseChatDayEnd(date, hour, zone)?.toISOString();
+
+  it("ends a day at the next midnight in the zone", () => {
+    expect(end("2026-09-25")).toBe("2026-09-26T07:00:00.000Z");
+    expect(end("2026-09-25", "", "Europe/Paris")).toBe("2026-09-25T22:00:00.000Z");
   });
 
-  it("moves a time that clocks skip past the change", () => {
-    expect(parseChatJumpTo("2026-03-08T02:30", ZONE)?.toISOString()).toBe("2026-03-08T10:30:00.000Z");
+  it("ends an hour at the next one", () => {
+    expect(end("2026-09-25", "21")).toBe("2026-09-26T05:00:00.000Z");
+    expect(end("2026-09-25", "0")).toBe("2026-09-25T08:00:00.000Z");
+    expect(end("2026-09-25", "23")).toBe("2026-09-26T07:00:00.000Z");
   });
 
-  it("rejects impossible, early and malformed values", () => {
-    for (const value of [
-      "2026-02-30T12:00",
-      "2026-09-25T24:00",
-      "0100-01-01",
-      "9999-12-31T23:59",
-      "yesterday",
-      ""
-    ]) {
-      expect(parseChatJumpTo(value, ZONE)).toBeNull();
+  it("ends hours on days clocks change on", () => {
+    // 02:00 is skipped on 8 March 2026 in Los Angeles; 01:00 happens twice
+    // on 1 November.
+    expect(end("2026-03-08", "1")).toBe("2026-03-08T10:00:00.000Z");
+    expect(end("2026-11-01", "1")).toBe("2026-11-01T10:00:00.000Z");
+  });
+
+  it("reads an hour it cannot read as the whole day", () => {
+    for (const hour of ["24", "-1", "abc", "1.5"]) {
+      expect(end("2026-09-25", hour)).toBe("2026-09-26T07:00:00.000Z");
+    }
+  });
+
+  it("rejects impossible, early, late and malformed days", () => {
+    for (const date of ["2026-02-30", "0100-01-01", "9999-12-31", "2026-9-25", "yesterday", ""]) {
+      expect(parseChatDayEnd(date, "", ZONE)).toBeNull();
     }
   });
 });
@@ -74,13 +84,13 @@ describe("readChatParams", () => {
     });
   });
 
-  it("places the messages by msg, then at, then before, then after", () => {
-    const all = { msg: "5", at: "2026-09-25T21:00", before: "9", after: "0" };
+  it("places the messages by msg, then date, then before, then after", () => {
+    const all = { msg: "5", date: "2026-09-25", hour: "21", before: "9", after: "0" };
 
     expect(readChatParams(query(all)).position).toEqual({ kind: "around", messageId: 5 });
     expect(readChatParams(query({ ...all, msg: "" })).position).toEqual({
-      kind: "at",
-      instant: new Date("2026-09-26T04:00:00.000Z")
+      kind: "until",
+      end: new Date("2026-09-26T05:00:00.000Z")
     });
     expect(readChatParams(query({ before: "9", after: "0" })).position).toEqual({
       kind: "before",
@@ -95,7 +105,7 @@ describe("readChatParams", () => {
       { before: "-3" },
       { before: "50000000000000000000" },
       { after: "1e3" },
-      { at: "tomorrow" }
+      { date: "tomorrow" }
     ];
     for (const values of unreadable) {
       expect(readChatParams(query(values)).position).toEqual({ kind: "latest" });

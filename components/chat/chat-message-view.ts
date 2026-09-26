@@ -66,10 +66,10 @@ function dayLabel(instant: Date, timeZone: string): string {
   return format.format(instant);
 }
 
-// "21:00 on Thursday, September 24, 2026", in `timeZone`.
-export function formatChatMoment(instant: Date, timeZone: string): string {
-  const clock = formatSqlDateTime(wallClockInTimeZone(instant, timeZone)).slice(11, 16);
-  return `${clock} on ${dayLabel(instant, timeZone)}`;
+// "Thursday, September 24, 2026" for "2026-09-24".
+export function formatChatDay(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return dayLabel(new Date(Date.UTC(year, month - 1, day)), "UTC");
 }
 
 function channelTone(subset: string | null): ChatChannelTone {

@@ -452,12 +452,12 @@ export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
     case "around":
       chatWindow = await selectWindowAround(filter, position.messageId, size);
       break;
-    case "at": {
-      // The chat as it was at the instant: the messages logged before the
-      // first one sent since.
+    case "until": {
+      // The messages logged before the first one sent since the day's or
+      // hour's end.
       const sinceId = await firstMessageIdSince(
         filter,
-        position.instant,
+        position.end,
         input.serverIds,
         adkatsServerIds
       );

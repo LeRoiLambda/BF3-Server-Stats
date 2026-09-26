@@ -92,7 +92,7 @@ will cause startup or request failures.
 | `BF3_STATS_DB_USER` | MySQL user. |
 | `BF3_STATS_DB_PASS` | MySQL password. |
 | `BF3_STATS_BANNER_IMAGE` | Public image path for the header banner, for example `/images/bf3-logo.png`. |
-| `BF3_STATS_TIME_ZONE` | IANA timezone the site shows times in, for example `Europe/Paris`. Defaults to `America/Los_Angeles`. The daily player trend, the weekly leaderboard's Monday reset and the chat's "jump to" field follow it too. |
+| `BF3_STATS_TIME_ZONE` | IANA timezone the site shows times in, for example `Europe/Paris`. Defaults to `America/Los_Angeles`. The chat's days, the daily player trend and the weekly leaderboard's Monday reset follow it too. |
 | `BF3_STATS_LOGGER_TIME_ZONE` | IANA timezone of the machine running Procon, for example `Europe/Paris` or `UTC`. The stats logger stamps rows with that machine's local time. |
 | `BF3_STATS_LOGGER_TIME_OFFSET` | The stats logger's "Servertime Offset" setting, in hours. Defaults to `0`. |
 
@@ -167,7 +167,8 @@ parameters:
 | `q` | Messages containing every word, in any order; `"a phrase"` in quotes matches as typed. |
 | `player` | Messages from one player, by player id. |
 | `channel` | `global`, `team` or `squad` chat only. |
-| `at` | Shows the chat as it stood at a date and time on the site's clock, such as `2026-09-25T21:00`: the messages sent before it. |
+| `date` | Shows a day's messages, such as `2026-09-25`, from its end back, and the days before. |
+| `hour` | With `date`, starts from the end of that hour, `0` to `23`, instead of the day's. |
 | `msg` | Shows a message, by id, among the messages around it. |
 | `before`, `after` | Shows the messages before or after a message id. |
 
