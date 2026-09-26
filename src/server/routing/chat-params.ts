@@ -8,8 +8,8 @@ export const CHAT_CHANNELS: readonly ChatChannel[] = ["global", "team", "squad"]
 export const CHAT_PAGE_SIZE = 50;
 
 // Which messages of the chat log are shown: the latest ones, those before or
-// after a message, those around a message, or those around the first message
-// sent at or after an instant.
+// after a message, those around a message, or those sent before an instant,
+// as the chat stood then.
 export type ChatPosition =
   | { kind: "latest" }
   | { kind: "before"; messageId: number }

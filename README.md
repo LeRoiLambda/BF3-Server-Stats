@@ -167,12 +167,14 @@ parameters:
 | `q` | Messages containing every word, in any order; `"a phrase"` in quotes matches as typed. |
 | `player` | Messages from one player, by player id. |
 | `channel` | `global`, `team` or `squad` chat only. |
-| `at` | Opens at the first message sent at or after a date and time on the site's clock, such as `2026-09-25T21:00`. |
-| `msg` | Opens at a message, by id, among the messages around it. |
-| `before`, `after` | Opens at the messages before or after a message id. |
+| `at` | Shows the chat as it stood at a date and time on the site's clock, such as `2026-09-25T21:00`: the messages sent before it. |
+| `msg` | Shows a message, by id, among the messages around it. |
+| `before`, `after` | Shows the messages before or after a message id. |
 
-The chat opens at the latest messages, loads older and newer ones as the page
-scrolls, and adds new messages every 10 seconds while the latest are shown.
+The chat lists the newest messages first and loads older ones as the page
+scrolls down. While the latest messages are shown, it checks for new ones
+every 10 seconds: they appear at the top, or wait behind a button while the
+reader is further down.
 
 ## API Endpoints
 
@@ -181,7 +183,7 @@ scrolls, and adds new messages every 10 seconds while the latest are shown.
 | `/api/health` | Checks database connectivity and active server context. |
 | `/api/servers` | Returns active server data as JSON. |
 | `/api/players/suggest` | Player autocomplete for search fields. |
-| `/api/chat` | Chat messages for the chat page: the same filters, `sid` for one server, and `before` or `after` a message id. |
+| `/api/chat` | Chat messages for the chat page, newest first: the same filters, `sid` for one server, and `before` or `after` a message id. |
 
 ## Project Structure
 

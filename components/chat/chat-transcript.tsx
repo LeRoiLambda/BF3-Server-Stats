@@ -12,6 +12,7 @@ import { ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 
 export type ChatTranscriptPage = {
+  // Newest first.
   messages: ChatMessageView[];
   hasOlder: boolean;
   hasNewer: boolean;
@@ -20,17 +21,14 @@ export type ChatTranscriptPage = {
   latestLoggedId: number;
 };
 
-// Where the page opened the log: at a linked message, or at a time whose first
-// message is marked (null when none was sent since).
-export type ChatTranscriptAnchor =
-  | { kind: "message"; messageId: number }
-  | { kind: "time"; messageId: number | null; label: string };
-
 type ChatTranscriptProps = Readonly<{
   initial: ChatTranscriptPage;
-  anchor: ChatTranscriptAnchor | null;
-  // Whether the page's URL places it anywhere but at the latest messages.
-  positioned: boolean;
+  // The message the page links to, highlighted and scrolled into view.
+  anchorId: number | null;
+  // What the page's URL shows instead of the latest messages, such as
+  // "Messages before 21:00 on Thursday, September 25, 2026"; null for the
+  // latest messages.
+  positionLabel: string | null;
   terms: string[];
   // The page's path and filter query; apiQuery adds the server for /api/chat.
   pagePath: string;
@@ -48,10 +46,12 @@ const FOLLOW_INTERVAL_MS = 10_000;
 // Checks for new messages start up to this many ids before the last one seen,
 // in case a lower id is committed after a higher one.
 const FOLLOW_OVERLAP_IDS = 20;
-// Scrolled this close to the bottom counts as reading the latest messages.
-const BOTTOM_SLACK_PX = 48;
-// While following, older messages beyond this many are dropped from the page.
-const MAX_FOLLOWED_MESSAGES = 500;
+// The top of the messages scrolled at most this far out of view still counts
+// as reading the newest ones.
+const TOP_SLACK_PX = 64;
+// While new messages are added at the top, the oldest beyond this many are
+// dropped from the page.
+const MAX_SHOWN_MESSAGES = 500;
 
 const CHANNEL_TONE_CLASSES: Record<ChatChannelTone, string> = {
   global: "border-slate-500/45 text-slate-300",
@@ -87,19 +87,6 @@ function DaySeparator({ label }: Readonly<{ label: string }>) {
   );
 }
 
-function JumpMarker({ label }: Readonly<{ label: string }>) {
-  return (
-    <li
-      data-anchor=""
-      className="flex items-center gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-teal-200 sm:px-4"
-    >
-      <span aria-hidden="true" className="h-px flex-1 bg-teal-400/45" />
-      {label}
-      <span aria-hidden="true" className="h-px flex-1 bg-teal-400/45" />
-    </li>
-  );
-}
-
 function Speaker({ message }: Readonly<{ message: ChatMessageView }>) {
   const name = (
     <>
@@ -129,6 +116,7 @@ function Speaker({ message }: Readonly<{ message: ChatMessageView }>) {
       {message.playerHref ? (
         <Link
           href={message.playerHref}
+          prefetch={false}
           className="rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70"
         >
           {name}
@@ -155,7 +143,6 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
   return (
     <li
       id={`message-${message.id}`}
-      data-anchor={anchored ? "" : undefined}
       className={clsx(
         "group/message relative py-1 pl-3 pr-9 text-sm leading-6 sm:flex sm:gap-3 sm:px-4",
         anchored
@@ -165,6 +152,7 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
     >
       <Link
         href={message.contextHref}
+        prefetch={false}
         title={message.sentAt ? `${message.sentAt.label} · show in conversation` : "Show in conversation"}
         className="mr-1 font-mono text-[11px] tabular-nums text-slate-500 hover:text-teal-200 sm:mr-0 sm:w-[4.25rem] sm:shrink-0"
       >
@@ -206,6 +194,7 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
       {playerFilterHref ? (
         <Link
           href={playerFilterHref}
+          prefetch={false}
           aria-label={`Show only messages from ${message.speaker}`}
           title={`Only messages from ${message.speaker}`}
           className="absolute right-2 top-1.5 rounded-sm p-1 text-slate-500 opacity-0 transition-opacity hover:bg-slate-800 hover:text-slate-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70 group-hover/message:opacity-100 sm:static sm:mt-1 sm:h-fit [@media(hover:none)]:opacity-100"
@@ -217,23 +206,25 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
   );
 }
 
+// `added` is newest first.
 function newMessageAnnouncement(added: ChatMessageView[]): string {
-  const last = added[added.length - 1];
-  const from = `${last.speaker || "Unknown"}: ${last.text}`;
+  const newest = added[0];
+  const from = `${newest.speaker || "Unknown"}: ${newest.text}`;
   return added.length === 1
     ? `New message from ${from}`
-    : `${added.length} new messages, the last from ${from}`;
+    : `${added.length} new messages, the newest from ${from}`;
 }
 
-// The chat log as a conversation, oldest message first. It opens at the
-// latest messages, or at the anchor, and loads older or newer ones as the
-// reader scrolls to either end. While the latest messages are shown it
-// checks for new ones and adds them, following them down when the reader is
-// at the bottom. Loads run one at a time, in the order they were asked for.
+// The chat log, newest message first. It opens at the latest messages, or
+// where the page's URL points, and loads older messages as the reader
+// scrolls down. While the latest messages are shown it checks for new ones:
+// they appear at the top while the reader is there, and wait behind a button
+// while the reader is further down. Loads run one at a time, in the order
+// they were asked for.
 export function ChatTranscript({
   initial,
-  anchor,
-  positioned,
+  anchorId,
+  positionLabel,
   terms,
   pagePath,
   filterQuery,
@@ -245,28 +236,28 @@ export function ChatTranscript({
   const [messages, setMessages] = useState(initial.messages);
   const [hasOlder, setHasOlder] = useState(initial.hasOlder);
   const [hasNewer, setHasNewer] = useState(initial.hasNewer);
+  // New messages that arrived while the reader was away from the top, newest
+  // first; `overflow` when more arrived than one load holds.
+  const [waiting, setWaiting] = useState<{ messages: ChatMessageView[]; overflow: boolean }>({
+    messages: [],
+    overflow: false
+  });
   const [loading, setLoading] = useState<LoadKind | null>(null);
   const [failed, setFailed] = useState(false);
-  const [unseen, setUnseen] = useState(0);
   const [announcement, setAnnouncement] = useState("");
-  // The first message sent since a "jump to" time, once one is known.
-  const [timeAnchorId, setTimeAnchorId] = useState(
-    anchor?.kind === "time" ? anchor.messageId : null
-  );
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   const olderRef = useRef<HTMLDivElement>(null);
-  const newerRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
-  const timeAnchorIdRef = useRef(timeAnchorId);
-  const atBottomRef = useRef(anchor === null);
+  const waitingRef = useRef(waiting);
+  const atTopRef = useRef(anchorId === null);
   // New messages are asked for after this id.
   const followAfterRef = useRef(
-    Math.max(initial.latestLoggedId, initial.messages.at(-1)?.id ?? 0)
+    Math.max(initial.latestLoggedId, initial.messages[0]?.id ?? 0)
   );
-  // Set before messages are added: keep this distance to the bottom (older
-  // messages above), or scroll to the bottom (followed messages below).
-  const keepBottomOffsetRef = useRef<number | null>(null);
-  const scrollToEndRef = useRef(false);
+  // Set before newer messages are added above the shown ones: keep this
+  // message where it is on the screen.
+  const keepInPlaceRef = useRef<{ id: number; top: number } | null>(null);
+  const scrollToTopRef = useRef(false);
   const queueRef = useRef<LoadKind[]>([]);
   const drainingRef = useRef(false);
   const filterPlayerId = new URLSearchParams(filterQuery).get("player");
@@ -276,53 +267,71 @@ export function ChatTranscript({
     setMessages(next);
   }, []);
 
-  const markTimeAnchor = useCallback((messageId: number) => {
-    timeAnchorIdRef.current = messageId;
-    setTimeAnchorId(messageId);
-  }, []);
+  const setWaitingMessages = useCallback(
+    (next: { messages: ChatMessageView[]; overflow: boolean }) => {
+      waitingRef.current = next;
+      setWaiting(next);
+    },
+    []
+  );
 
   const unknownMessages = useCallback((page: ChatTranscriptPage) => {
-    const known = new Set(messagesRef.current.map((message) => message.id));
+    const known = new Set(
+      [...messagesRef.current, ...waitingRef.current.messages].map((message) => message.id)
+    );
     return page.messages.filter((message) => !known.has(message.id));
   }, []);
+
+  // Adds messages above the shown ones, dropping the oldest beyond the limit.
+  const addNewest = useCallback(
+    (added: ChatMessageView[]) => {
+      let next = [...added, ...messagesRef.current];
+      if (next.length > MAX_SHOWN_MESSAGES) {
+        next = next.slice(0, MAX_SHOWN_MESSAGES);
+        setHasOlder(true);
+      }
+      showMessages(next);
+    },
+    [showMessages]
+  );
 
   // Everything up to the page's newest message, or the log's, has been read.
   const followPast = useCallback((page: ChatTranscriptPage) => {
     followAfterRef.current = Math.max(
       followAfterRef.current,
       page.latestLoggedId,
-      page.messages.at(-1)?.id ?? 0
+      page.messages[0]?.id ?? 0
     );
   }, []);
 
   const loadLatest = useCallback(async () => {
     const page = await fetchPage(apiQuery, {});
-    keepBottomOffsetRef.current = null;
-    scrollToEndRef.current = true;
     showMessages(page.messages);
     setHasOlder(page.hasOlder);
     setHasNewer(false);
-    setUnseen(0);
+    setWaitingMessages({ messages: [], overflow: false });
     followPast(page);
-  }, [apiQuery, followPast, showMessages]);
+    scrollToTopRef.current = true;
+  }, [apiQuery, followPast, setWaitingMessages, showMessages]);
 
   const loadOlder = useCallback(async () => {
-    const first = messagesRef.current[0];
-    if (!first) {
+    const oldest = messagesRef.current.at(-1);
+    if (!oldest) {
       return;
     }
 
-    const page = await fetchPage(apiQuery, { before: String(first.id) });
-    const container = scrollRef.current;
-    keepBottomOffsetRef.current = container ? container.scrollHeight - container.scrollTop : null;
-    showMessages([...unknownMessages(page), ...messagesRef.current]);
+    const page = await fetchPage(apiQuery, { before: String(oldest.id) });
+    showMessages([...messagesRef.current, ...unknownMessages(page)]);
     setHasOlder(page.hasOlder);
   }, [apiQuery, showMessages, unknownMessages]);
 
   const loadNewer = useCallback(async () => {
-    const last = messagesRef.current.at(-1);
-    const page = await fetchPage(apiQuery, { after: String(last?.id ?? 0) });
-    showMessages([...messagesRef.current, ...unknownMessages(page)]);
+    const newest = messagesRef.current[0];
+    const page = await fetchPage(apiQuery, { after: String(newest?.id ?? 0) });
+    const kept = newest ? document.getElementById(`message-${newest.id}`) : null;
+    keepInPlaceRef.current =
+      newest && kept ? { id: newest.id, top: kept.getBoundingClientRect().top } : null;
+    showMessages([...unknownMessages(page), ...messagesRef.current]);
     setHasNewer(page.hasNewer);
     if (!page.hasNewer) {
       followPast(page);
@@ -332,26 +341,24 @@ export function ChatTranscript({
   const follow = useCallback(async () => {
     // The overlap stays within the shown messages: an empty transcript has
     // nothing to fill in, so it asks only for what is new.
-    const first = messagesRef.current[0];
-    const overlapFloor = first ? first.id - 1 : followAfterRef.current;
+    const oldest = messagesRef.current.at(-1);
+    const overlapFloor = oldest ? oldest.id - 1 : followAfterRef.current;
     const page = await fetchPage(apiQuery, {
       after: String(Math.max(overlapFloor, followAfterRef.current - FOLLOW_OVERLAP_IDS))
     });
     const added = unknownMessages(page);
-    if (added.length > 0 && timeAnchorIdRef.current === null && anchor?.kind === "time") {
-      markTimeAnchor(added[0].id);
-    }
 
-    // More arrived than one load holds: a reader at the bottom moves on to the
-    // latest messages; one reading further up gets the rest on scrolling down.
+    // More arrived than one load holds: a reader at the top moves on to the
+    // latest messages; one further down gets them from the button.
     if (page.hasNewer) {
-      if (atBottomRef.current) {
+      if (atTopRef.current) {
         await loadLatest();
         return;
       }
-      showMessages([...messagesRef.current, ...added]);
-      setHasNewer(true);
-      setUnseen((count) => count + added.length);
+      setWaitingMessages({ messages: [...added, ...waitingRef.current.messages], overflow: true });
+      if (added.length > 0) {
+        setAnnouncement(newMessageAnnouncement(added));
+      }
       return;
     }
 
@@ -360,19 +367,13 @@ export function ChatTranscript({
       return;
     }
 
-    let next = [...messagesRef.current, ...added];
-    if (atBottomRef.current) {
-      scrollToEndRef.current = true;
-      if (next.length > MAX_FOLLOWED_MESSAGES) {
-        next = next.slice(next.length - MAX_FOLLOWED_MESSAGES);
-        setHasOlder(true);
-      }
+    if (atTopRef.current && waitingRef.current.messages.length === 0) {
+      addNewest(added);
     } else {
-      setUnseen((count) => count + added.length);
+      setWaitingMessages({ messages: [...added, ...waitingRef.current.messages], overflow: false });
     }
-    showMessages(next);
     setAnnouncement(newMessageAnnouncement(added));
-  }, [anchor, apiQuery, followPast, loadLatest, markTimeAnchor, showMessages, unknownMessages]);
+  }, [addNewest, apiQuery, followPast, loadLatest, setWaitingMessages, unknownMessages]);
 
   const loaders: Record<LoadKind, () => Promise<void>> = {
     older: loadOlder,
@@ -427,36 +428,65 @@ export function ChatTranscript({
     [drain]
   );
 
-  // Opens at the anchor, centered, or else at the bottom.
-  useLayoutEffect(() => {
-    const container = scrollRef.current;
-    if (!container) {
+  // Shows the messages waiting behind the button, at the top.
+  const showWaiting = useCallback(() => {
+    if (waitingRef.current.overflow) {
+      request("latest");
       return;
     }
 
-    const target = container.querySelector<HTMLElement>("[data-anchor]");
-    container.scrollTop = target
-      ? target.offsetTop - (container.clientHeight - target.offsetHeight) / 2
-      : container.scrollHeight;
-  }, []);
+    addNewest(waitingRef.current.messages);
+    setWaitingMessages({ messages: [], overflow: false });
+  }, [addNewest, request, setWaitingMessages]);
 
-  useLayoutEffect(() => {
-    const container = scrollRef.current;
-    if (!container) {
+  // Opens at the linked message, centered, once the router has placed the
+  // page.
+  useEffect(() => {
+    if (anchorId === null) {
       return;
     }
 
-    if (keepBottomOffsetRef.current !== null) {
-      container.scrollTop = container.scrollHeight - keepBottomOffsetRef.current;
-      keepBottomOffsetRef.current = null;
-    } else if (scrollToEndRef.current) {
-      container.scrollTop = container.scrollHeight;
-      scrollToEndRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`message-${anchorId}`)?.scrollIntoView({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [anchorId]);
+
+  useLayoutEffect(() => {
+    const kept = keepInPlaceRef.current;
+    keepInPlaceRef.current = null;
+    if (kept) {
+      const element = document.getElementById(`message-${kept.id}`);
+      if (element) {
+        window.scrollBy(0, element.getBoundingClientRect().top - kept.top);
+      }
+    } else if (scrollToTopRef.current) {
+      scrollToTopRef.current = false;
+      const top = topRef.current;
+      if (top && top.getBoundingClientRect().top < 0) {
+        top.scrollIntoView({ block: "start" });
+      }
     }
   }, [messages]);
 
+  // Tracks whether the reader is at the newest messages, and shows the
+  // waiting ones when they scroll back up to them.
   useEffect(() => {
-    if (hasNewer) {
+    const update = () => {
+      const top = topRef.current;
+      atTopRef.current = top !== null && top.getBoundingClientRect().top >= -TOP_SLACK_PX;
+      if (atTopRef.current && waitingRef.current.messages.length > 0 && !waitingRef.current.overflow) {
+        showWaiting();
+      }
+    };
+
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, [showWaiting]);
+
+  useEffect(() => {
+    if (hasNewer || waiting.overflow) {
       return;
     }
 
@@ -472,76 +502,57 @@ export function ChatTranscript({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", followIfVisible);
     };
-  }, [hasNewer, request]);
+  }, [hasNewer, request, waiting.overflow]);
 
-  // Loads more when either end scrolls near. Observing again after each load
-  // keeps loading while an end stays in view, as in a short log.
+  // Loads older messages as the end of the list scrolls near. Observing
+  // again after each load keeps loading while the end stays in view, as in a
+  // short log.
   useEffect(() => {
-    const root = scrollRef.current;
     const older = hasOlder ? olderRef.current : null;
-    const newer = hasNewer ? newerRef.current : null;
-    if (!root || failed || (!older && !newer)) {
+    if (!older || failed) {
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            request(entry.target === older ? "older" : "newer");
-          }
+        if (entries.some((entry) => entry.isIntersecting)) {
+          request("older");
         }
       },
-      { root, rootMargin: "240px 0px" }
+      { rootMargin: "0px 0px 600px 0px" }
     );
-    for (const target of [older, newer]) {
-      if (target) {
-        observer.observe(target);
-      }
-    }
+    observer.observe(older);
 
     return () => observer.disconnect();
-  }, [hasOlder, hasNewer, failed, messages, request]);
-
-  function handleScroll() {
-    const container = scrollRef.current;
-    if (!container) {
-      return;
-    }
-
-    atBottomRef.current =
-      container.scrollHeight - container.scrollTop - container.clientHeight < BOTTOM_SLACK_PX;
-    if (atBottomRef.current) {
-      setUnseen(0);
-    }
-  }
-
-  function scrollToEnd() {
-    const container = scrollRef.current;
-    if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    }
-    setUnseen(0);
-  }
+  }, [hasOlder, failed, messages, request]);
 
   function loadInPlace(event: MouseEvent<HTMLAnchorElement>, kind: LoadKind) {
     event.preventDefault();
     request(kind);
   }
 
-  const first = messages[0];
-  const last = messages.at(-1);
+  function showWaitingAtTop() {
+    scrollToTopRef.current = true;
+    showWaiting();
+  }
+
+  const newest = messages[0];
+  const oldest = messages.at(-1);
   const latestHref = chatHref(pagePath, filterQuery);
+  const waitingCount = waiting.messages.length;
 
   return (
-    <div className="relative">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-slate-400">
+    <div>
+      <div
+        ref={topRef}
+        className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400"
+      >
         {hasNewer ? (
           <span>
-            Showing earlier messages.{" "}
-            {positioned ? (
+            {positionLabel ?? "Earlier messages"}.{" "}
+            {positionLabel !== null ? (
               <Link href={latestHref} className="font-semibold text-teal-200 hover:text-teal-100">
-                Jump to the latest
+                Back to the latest
               </Link>
             ) : (
               <a
@@ -549,7 +560,7 @@ export function ChatTranscript({
                 onClick={(event) => loadInPlace(event, "latest")}
                 className="font-semibold text-teal-200 hover:text-teal-100"
               >
-                Jump to the latest
+                Back to the latest
               </a>
             )}
           </span>
@@ -566,39 +577,45 @@ export function ChatTranscript({
         {announcement}
       </p>
 
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        role="region"
-        aria-label="Chat messages"
-        aria-busy={loading !== null}
-        tabIndex={0}
-        className="relative h-[min(70vh,44rem)] overflow-y-auto rounded-sm border border-slate-600/35 bg-slate-950/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/50"
-      >
-        {hasOlder && first ? (
-          <div ref={olderRef} className="flex justify-center py-3">
+      {waitingCount > 0 || waiting.overflow ? (
+        <button
+          type="button"
+          onClick={showWaitingAtTop}
+          className="fixed left-1/2 top-10 z-20 -translate-x-1/2 rounded-full border border-teal-400/60 bg-teal-900/90 px-3 py-1 text-xs font-semibold text-slate-50 shadow-[0_8px_20px_rgba(0,0,0,0.45)] hover:bg-teal-800"
+        >
+          ↑{" "}
+          {waiting.overflow
+            ? `${waitingCount}+ new messages`
+            : waitingCount === 1
+              ? "1 new message"
+              : `${waitingCount} new messages`}
+        </button>
+      ) : null}
+
+      {/* The browser keeps no scroll anchor in here: messages added below
+          the reader must not move them, and those added above are placed
+          by keepInPlaceRef. */}
+      <div className="rounded-sm border border-slate-600/35 bg-slate-950/60 [overflow-anchor:none]">
+        {hasNewer && newest ? (
+          <div className="flex justify-center border-b border-slate-800/70 py-3">
             <a
-              href={chatHref(pagePath, filterQuery, { before: String(first.id) })}
-              onClick={(event) => loadInPlace(event, "older")}
+              href={chatHref(pagePath, filterQuery, { after: String(newest.id) })}
+              onClick={(event) => loadInPlace(event, "newer")}
               className={ui.buttonGhost}
             >
-              {loading === "older" ? "Loading..." : "Load older messages"}
+              {loading === "newer" ? "Loading..." : "Show newer messages"}
             </a>
           </div>
-        ) : messages.length > 0 ? (
-          <p className="py-3 text-center text-[11px] uppercase tracking-wide text-slate-500">
-            {filtered ? "No earlier matching messages" : "Start of the chat log"}
-          </p>
         ) : null}
 
-        {messages.length === 0 && anchor?.kind !== "time" ? (
+        {messages.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-slate-400">
             {emptyLabel}
             {hasNewer ? null : " New ones will appear here."}
           </p>
         ) : null}
 
-        <ol className="pb-2">
+        <ol aria-label="Chat messages" aria-busy={loading !== null}>
           {messages.map((message, index) => {
             const day = message.sentAt?.day ?? null;
             const newDay = day !== null && day !== messages[index - 1]?.sentAt?.day;
@@ -607,13 +624,10 @@ export function ChatTranscript({
             return (
               <Fragment key={message.id}>
                 {newDay && message.sentAt ? <DaySeparator label={message.sentAt.dayLabel} /> : null}
-                {anchor?.kind === "time" && timeAnchorId === message.id ? (
-                  <JumpMarker label={anchor.label} />
-                ) : null}
                 <ChatMessageRow
                   message={message}
                   terms={terms}
-                  anchored={anchor?.kind === "message" && anchor.messageId === message.id}
+                  anchored={anchorId === message.id}
                   playerFilterHref={
                     playerId !== null && playerId !== filterPlayerId
                       ? chatHref(pagePath, filterQuery, { player: playerId })
@@ -623,33 +637,24 @@ export function ChatTranscript({
               </Fragment>
             );
           })}
-          {anchor?.kind === "time" && timeAnchorId === null ? (
-            <JumpMarker label={`No messages since ${anchor.label}`} />
-          ) : null}
         </ol>
 
-        {hasNewer && last ? (
-          <div ref={newerRef} className="flex justify-center py-3">
+        {hasOlder && oldest ? (
+          <div ref={olderRef} className="flex justify-center border-t border-slate-800/70 py-3">
             <a
-              href={chatHref(pagePath, filterQuery, { after: String(last.id) })}
-              onClick={(event) => loadInPlace(event, "newer")}
+              href={chatHref(pagePath, filterQuery, { before: String(oldest.id) })}
+              onClick={(event) => loadInPlace(event, "older")}
               className={ui.buttonGhost}
             >
-              {loading === "newer" ? "Loading..." : "Load newer messages"}
+              {loading === "older" ? "Loading..." : "Load older messages"}
             </a>
           </div>
+        ) : messages.length > 0 ? (
+          <p className="border-t border-slate-800/70 py-3 text-center text-[11px] uppercase tracking-wide text-slate-500">
+            {filtered ? "No earlier matching messages" : "Start of the chat log"}
+          </p>
         ) : null}
       </div>
-
-      {unseen > 0 ? (
-        <button
-          type="button"
-          onClick={scrollToEnd}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-teal-400/60 bg-teal-900/90 px-3 py-1 text-xs font-semibold text-slate-50 shadow-[0_8px_20px_rgba(0,0,0,0.45)] hover:bg-teal-800"
-        >
-          {unseen === 1 ? "1 new message" : `${unseen} new messages`}
-        </button>
-      ) : null}
 
       {failed ? (
         <p role="alert" className="mt-2 text-xs text-rose-200">

@@ -41,22 +41,19 @@ export type ChatLogInput = {
   size: number;
 };
 
-// A run of consecutive matching messages, oldest first.
+// A run of consecutive matching messages, newest first.
 export type ChatLog = {
   // The player whose messages are shown, when the filter names one that exists.
   player: ChatPlayer | null;
   messages: ChatMessage[];
   hasOlder: boolean;
   hasNewer: boolean;
-  // The message the position points at: the one asked for, or the first one
-  // sent at or after the instant asked for. Null when there is none.
-  anchorId: number | null;
   // The chat log's highest id before the messages were read. New messages
   // matching the filters come after it, however far back the last match is.
   latestLoggedId: number;
 };
 
-// Ids of consecutive matching messages, oldest first.
+// Ids of consecutive matching messages, newest first.
 export type ChatWindow = {
   ids: number[];
   hasOlder: boolean;
@@ -119,7 +116,7 @@ export function centerChatWindow(older: number[], newer: number[], size: number)
   const olderCount = Math.min(older.length, size - newerCount);
 
   return {
-    ids: [...older.slice(0, olderCount).reverse(), ...newer.slice(0, newerCount)],
+    ids: [...newer.slice(0, newerCount).reverse(), ...older.slice(0, olderCount)],
     hasOlder: older.length > olderCount,
     hasNewer: newer.length > newerCount
   };
@@ -255,11 +252,22 @@ async function selectMessageIds(
 async function selectLatestWindow(filter: Condition, size: number): Promise<ChatWindow> {
   const ids = await selectMessageIds(filter, null, "DESC", size + 1);
 
-  return {
-    ids: ids.slice(0, size).reverse(),
-    hasOlder: ids.length > size,
-    hasNewer: false
-  };
+  return { ids: ids.slice(0, size), hasOlder: ids.length > size, hasNewer: false };
+}
+
+async function selectWindowBefore(
+  filter: Condition,
+  messageId: number,
+  size: number
+): Promise<ChatWindow> {
+  const ids = await selectMessageIds(
+    filter,
+    { sql: "cl.ID < ?", params: [messageId] },
+    "DESC",
+    size + 1
+  );
+
+  return { ids: ids.slice(0, size), hasOlder: ids.length > size, hasNewer: true };
 }
 
 async function selectWindowAround(
@@ -374,7 +382,7 @@ async function loadMessages(
       LEFT JOIN tbl_server ts ON ts.ServerID = chat.serverId
       LEFT JOIN tbl_playerdata tpd ON tpd.PlayerID = chat.playerId AND tpd.GameID = ?
       ${adkatsBansAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-      ORDER BY chat.id ASC
+      ORDER BY chat.id DESC
     `,
     [gameId, ...ids, gameId]
   );
@@ -403,20 +411,13 @@ async function loadMessages(
 }
 
 // Reads `size` consecutive messages that match the filters, at the position
-// asked for. Messages are in the order they were logged.
+// asked for, newest first in the order they were logged.
 export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
   const latestLoggedId = await readLatestLoggedId();
   const player =
     input.playerId === null ? null : await getChatPlayer(input.playerId, input.gameId);
   if (input.playerId !== null && !player) {
-    return {
-      player: null,
-      messages: [],
-      hasOlder: false,
-      hasNewer: false,
-      anchorId: null,
-      latestLoggedId
-    };
+    return { player: null, messages: [], hasOlder: false, hasNewer: false, latestLoggedId };
   }
 
   const size = Math.max(1, Math.min(MAX_CHAT_WINDOW_SIZE, Math.floor(input.size)));
@@ -426,26 +427,14 @@ export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
   ]);
   const position = input.position;
   let chatWindow = EMPTY_WINDOW;
-  let anchorId: number | null = null;
 
   switch (position.kind) {
     case "latest":
       chatWindow = await selectLatestWindow(filter, size);
       break;
-    case "before": {
-      const ids = await selectMessageIds(
-        filter,
-        { sql: "cl.ID < ?", params: [position.messageId] },
-        "DESC",
-        size + 1
-      );
-      chatWindow = {
-        ids: ids.slice(0, size).reverse(),
-        hasOlder: ids.length > size,
-        hasNewer: true
-      };
+    case "before":
+      chatWindow = await selectWindowBefore(filter, position.messageId, size);
       break;
-    }
     case "after": {
       const ids = await selectMessageIds(
         filter,
@@ -454,28 +443,30 @@ export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
         size + 1
       );
       chatWindow = {
-        ids: ids.slice(0, size),
+        ids: ids.slice(0, size).reverse(),
         hasOlder: position.messageId > 0,
         hasNewer: ids.length > size
       };
       break;
     }
     case "around":
-      anchorId = position.messageId;
-      chatWindow = await selectWindowAround(filter, anchorId, size);
+      chatWindow = await selectWindowAround(filter, position.messageId, size);
       break;
-    case "at":
-      anchorId = await firstMessageIdSince(
+    case "at": {
+      // The chat as it was at the instant: the messages logged before the
+      // first one sent since.
+      const sinceId = await firstMessageIdSince(
         filter,
         position.instant,
         input.serverIds,
         adkatsServerIds
       );
       chatWindow =
-        anchorId === null
+        sinceId === null
           ? await selectLatestWindow(filter, size)
-          : await selectWindowAround(filter, anchorId, size);
+          : await selectWindowBefore(filter, sinceId, size);
       break;
+    }
   }
 
   return {
@@ -483,7 +474,6 @@ export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
     messages: await loadMessages(chatWindow.ids, input.gameId, adkatsServerIds),
     hasOlder: chatWindow.hasOlder,
     hasNewer: chatWindow.hasNewer,
-    anchorId,
     latestLoggedId
   };
 }

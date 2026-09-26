@@ -13,11 +13,11 @@ describe("centerChatWindow", () => {
   const ids = (from: number, count: number, step: number) =>
     Array.from({ length: count }, (_, index) => from + index * step);
 
-  it("puts half the messages on each side of the anchor", async () => {
+  it("puts half the messages on each side of the anchor, newest first", async () => {
     const { centerChatWindow } = await chatRepository();
 
     expect(centerChatWindow(ids(99, 5, -1), ids(100, 5, 1), 4)).toEqual({
-      ids: [98, 99, 100, 101],
+      ids: [101, 100, 99, 98],
       hasOlder: true,
       hasNewer: true
     });
@@ -27,12 +27,12 @@ describe("centerChatWindow", () => {
     const { centerChatWindow } = await chatRepository();
 
     expect(centerChatWindow(ids(99, 5, -1), [100], 4)).toEqual({
-      ids: [97, 98, 99, 100],
+      ids: [100, 99, 98, 97],
       hasOlder: true,
       hasNewer: false
     });
     expect(centerChatWindow([99], ids(100, 5, 1), 4)).toEqual({
-      ids: [99, 100, 101, 102],
+      ids: [102, 101, 100, 99],
       hasOlder: false,
       hasNewer: true
     });

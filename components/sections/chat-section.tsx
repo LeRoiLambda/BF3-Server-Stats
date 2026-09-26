@@ -1,7 +1,7 @@
 import { ChatFilters } from "@/components/chat/chat-filters";
 import { chatQuery } from "@/components/chat/chat-href";
-import { toChatMessageView } from "@/components/chat/chat-message-view";
-import { ChatTranscript, type ChatTranscriptAnchor } from "@/components/chat/chat-transcript";
+import { formatChatMoment, toChatMessageView } from "@/components/chat/chat-message-view";
+import { ChatTranscript } from "@/components/chat/chat-transcript";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
 import { getChatLog } from "@/src/server/repositories/chat-repository";
@@ -21,7 +21,6 @@ import {
   type SearchParams
 } from "@/src/server/routing/server-pages";
 import { siteTimeZone } from "@/src/server/utils/site-time";
-import { formatInZone } from "@/src/server/utils/time-zones";
 
 type ChatSectionProps = {
   scope: PageScope;
@@ -40,7 +39,7 @@ function positionKey(position: ChatPosition): string {
   }
 }
 
-function emptyLabel(params: ChatParams, filtered: boolean): string {
+function emptyLabel(params: ChatParams, filtered: boolean, timeZone: string): string {
   const matching = filtered ? "matching " : "";
 
   switch (params.position.kind) {
@@ -48,27 +47,24 @@ function emptyLabel(params: ChatParams, filtered: boolean): string {
       return `No earlier ${matching}messages.`;
     case "after":
       return `No newer ${matching}messages yet.`;
+    case "at":
+      return `No ${matching}messages before ${formatChatMoment(params.position.instant, timeZone)}.`;
     default:
       return filtered ? "No messages match these filters." : "No chat messages yet.";
   }
 }
 
-function transcriptAnchor(
-  params: ChatParams,
-  anchorId: number | null,
-  timeZone: string
-): ChatTranscriptAnchor | null {
+// What the page shows instead of the latest messages; null for those.
+function positionLabel(params: ChatParams, timeZone: string): string | null {
   switch (params.position.kind) {
-    case "around":
-      return { kind: "message", messageId: params.position.messageId };
-    case "at":
-      return {
-        kind: "time",
-        messageId: anchorId,
-        label: formatInZone(params.position.instant, timeZone)
-      };
-    default:
+    case "latest":
       return null;
+    case "at":
+      return `Messages before ${formatChatMoment(params.position.instant, timeZone)}`;
+    case "around":
+      return "A message in its conversation";
+    default:
+      return "Earlier messages";
   }
 }
 
@@ -121,8 +117,8 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
             hasNewer: log.hasNewer,
             latestLoggedId: log.latestLoggedId
           }}
-          anchor={transcriptAnchor(params, log.anchorId, timeZone)}
-          positioned={params.position.kind !== "latest"}
+          anchorId={params.position.kind === "around" ? params.position.messageId : null}
+          positionLabel={positionLabel(params, timeZone)}
           terms={params.terms}
           pagePath={pagePath}
           filterQuery={filterQuery}
@@ -132,7 +128,7 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
           })}
           timeZone={timeZone}
           filtered={filtered}
-          emptyLabel={emptyLabel(params, filtered)}
+          emptyLabel={emptyLabel(params, filtered, timeZone)}
         />
       </section>
     </StatsShell>
