@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import {
   containsPattern,
   searchableText,
@@ -342,7 +343,7 @@ export async function getPlayerProfileById(
         SUM(tps.Score) AS score,
         SUM(tps.Kills) AS kills,
         SUM(tps.Deaths) AS deaths,
-        (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
+        ${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")} AS kdr,
         ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr,
         SUM(tps.TKs) AS teamKills,
         SUM(tps.Headshots) AS headshots,
@@ -351,7 +352,7 @@ export async function getPlayerProfileById(
         MAX(tps.Deathstreak) AS deathstreak,
         SUM(tps.Wins) AS wins,
         SUM(tps.Losses) AS losses,
-        (SUM(tps.Wins) / NULLIF(SUM(tps.Losses), 0)) AS wlr,
+        ${perAtLeastOneSql("SUM(tps.Wins)", "SUM(tps.Losses)")} AS wlr,
         MAX(tps.HighScore) AS highScore,
         MIN(tps.FirstSeenOnServer) AS firstSeenOnServer,
         MAX(tps.LastSeenOnServer) AS lastSeenOnServer
@@ -413,7 +414,7 @@ export async function getPlayerRankPositions(
     countRankedPlayers(input),
     getPlayerMetricRank(input, "SUM(tps.Score)"),
     getPlayerMetricRank(input, "SUM(tps.Kills)"),
-    getPlayerMetricRank(input, "(SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0))")
+    getPlayerMetricRank(input, perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)"))
   ]);
 
   return {
@@ -608,7 +609,7 @@ export async function searchPlayersByName(
         tpd.CountryCode AS countryCode,
         SUM(tps.Score) AS score,
         SUM(tps.Kills) AS kills,
-        (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr
+        ${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")} AS kdr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_playerstats tps
       INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID

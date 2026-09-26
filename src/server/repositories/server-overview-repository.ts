@@ -1,5 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 
 type ServerStatsRow = RowDataPacket & {
@@ -44,7 +45,7 @@ export async function getServerOverviewStats(
         AvgKills AS avgKills,
         AvgDeaths AS avgDeaths,
         (SumHeadshots / NULLIF(SumKills, 0)) * 100 AS avgHsr,
-        (SumKills / NULLIF(SumDeaths, 0)) AS avgKdr
+        ${perAtLeastOneSql("SumKills", "SumDeaths")} AS avgKdr
       FROM tbl_server_stats
       WHERE ServerID = ?
       LIMIT 1

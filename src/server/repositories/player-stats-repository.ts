@@ -2,6 +2,7 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable, hasTableRows } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import {
   buildServerScopeCondition,
   type ServerScopeInput
@@ -110,7 +111,7 @@ const SORT_SQL: Record<LeaderSort, string> = {
   soldierName: "tpd.SoldierName",
   score: "COALESCE(tps.Score, 0)",
   kills: "COALESCE(tps.Kills, 0)",
-  kdr: "COALESCE((tps.Kills / NULLIF(tps.Deaths, 0)), 0)",
+  kdr: `COALESCE(${perAtLeastOneSql("tps.Kills", "tps.Deaths")}, 0)`,
   hsr: "COALESCE(((tps.Headshots / NULLIF(tps.Kills, 0)) * 100), 0)"
 };
 
@@ -118,7 +119,7 @@ const ALL_SERVERS_SORT_SQL: Record<LeaderSort, string> = {
   soldierName: "tpd.SoldierName",
   score: "COALESCE(SUM(tps.Score), 0)",
   kills: "COALESCE(SUM(tps.Kills), 0)",
-  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
+  kdr: `COALESCE(${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")}, 0)`,
   hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)"
 };
 
@@ -325,7 +326,7 @@ export async function getServerLeaderboard(
       tpd.CountryCode AS countryCode,
       tps.Score AS score,
       tps.Kills AS kills,
-      (tps.Kills / NULLIF(tps.Deaths, 0)) AS kdr,
+      ${perAtLeastOneSql("tps.Kills", "tps.Deaths")} AS kdr,
       ((tps.Headshots / NULLIF(tps.Kills, 0)) * 100) AS hsr
       ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
     FROM tbl_playerstats tps
@@ -423,7 +424,7 @@ export async function getAllServersLeaderboard(
       tpd.CountryCode AS countryCode,
       SUM(tps.Score) AS score,
       SUM(tps.Kills) AS kills,
-      (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
+      ${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")} AS kdr,
       ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr
       ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
     FROM tbl_playerstats tps
@@ -491,7 +492,7 @@ async function getWeeklyLeaderboard(
         tpd.CountryCode AS countryCode,
         SUM(tss.Score) AS score,
         SUM(tss.Kills) AS kills,
-        (SUM(tss.Kills) / NULLIF(SUM(tss.Deaths), 0)) AS kdr,
+        ${perAtLeastOneSql("SUM(tss.Kills)", "SUM(tss.Deaths)")} AS kdr,
         ((SUM(tss.Headshots) / NULLIF(SUM(tss.Kills), 0)) * 100) AS hsr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_sessions tss

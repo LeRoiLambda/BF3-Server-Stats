@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 
@@ -50,9 +51,7 @@ type CountRow = RowDataPacket & {
   totalRows: number;
 };
 
-// Zero deaths count as one, so a player who never died has a KDR equal to
-// their kills.
-const KDR_SQL = "(SUM(tps.Kills) / GREATEST(SUM(tps.Deaths), 1))";
+const KDR_SQL = perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)");
 
 const SORT_SQL: Record<SuspiciousSort, string> = {
   soldierName: "tpd.SoldierName",

@@ -1,5 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import {
   buildServerScopeCondition,
   normalizeServerScopeInput,
@@ -113,7 +114,7 @@ export async function getServerDetailStats(
           (SUM(SumDeaths) / NULLIF(MAX(players.countPlayers), 0)) AS averageDeaths,
           (SUM(SumSuicide) / NULLIF(MAX(players.countPlayers), 0)) AS averageSuicides,
           (SUM(SumTKs) / NULLIF(MAX(players.countPlayers), 0)) AS averageTeamKills,
-          (SUM(SumKills) / NULLIF(SUM(SumDeaths), 0)) AS averageKdr,
+          ${perAtLeastOneSql("SUM(SumKills)", "SUM(SumDeaths)")} AS averageKdr,
           ((SUM(SumHeadshots) / NULLIF(SUM(SumKills), 0)) * 100) AS averageHsr
         FROM tbl_server_stats
         CROSS JOIN (
@@ -136,7 +137,7 @@ export async function getServerDetailStats(
           AvgDeaths AS averageDeaths,
           AvgSuicide AS averageSuicides,
           AvgTKs AS averageTeamKills,
-          (SumKills / NULLIF(SumDeaths, 0)) AS averageKdr,
+          ${perAtLeastOneSql("SumKills", "SumDeaths")} AS averageKdr,
           ((SumHeadshots / NULLIF(SumKills, 0)) * 100) AS averageHsr
         FROM tbl_server_stats
         WHERE ${scope.sql}
