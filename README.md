@@ -43,7 +43,7 @@ fork: https://github.com/leroilambda/adkats.
 
 ## Requirements
 
-- Node.js 20.9 or newer
+- Node.js 20.19 or a later 20.x, or 22.12 or newer
 - npm
 - A MySQL database containing the BF3 stats tables produced by the Procon
   stats/mapstats logger

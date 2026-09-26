@@ -4,7 +4,7 @@
   "private": true,
   "description": "Node.js + Tailwind rewrite foundation for BF3 Server Stats",
   "engines": {
-    "node": ">=20.9.0"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "next dev",
