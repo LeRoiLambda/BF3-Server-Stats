@@ -616,7 +616,7 @@ export async function searchPlayersByName(
       INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
       ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
       WHERE ${whereParts.join(" AND ")}
-      GROUP BY tpd.PlayerID
+      GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
       ORDER BY
         ${searchableText("tpd.SoldierName")} = ? DESC,
         ${searchableText("tpd.SoldierName")} LIKE ? DESC,
