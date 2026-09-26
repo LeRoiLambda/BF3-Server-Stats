@@ -27,6 +27,15 @@ describe("formatSiteTime", () => {
   });
 });
 
+describe("siteDate", () => {
+  it("reads the date on the site's clock", async () => {
+    const { siteDate } = await siteClock("America/Los_Angeles");
+
+    expect(siteDate(new Date("2026-09-25T06:59:59Z"))).toBe("2026-09-24");
+    expect(siteDate(new Date("2026-09-25T07:00:00Z"))).toBe("2026-09-25");
+  });
+});
+
 describe("siteDatesBetween", () => {
   it("lists the dates on the site's clock", async () => {
     const { siteDatesBetween } = await siteClock("America/Los_Angeles");

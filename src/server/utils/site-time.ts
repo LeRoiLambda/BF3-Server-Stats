@@ -36,11 +36,16 @@ export function formatSiteTime(instant: Date): string {
   return `${formatSqlDateTime(wallClockInTimeZone(instant, timeZone))} ${zoneName(instant, timeZone)}`;
 }
 
+// The "YYYY-MM-DD" date on the site's clock at `instant`.
+export function siteDate(instant: Date): string {
+  return formatSqlDate(wallClockInTimeZone(instant, siteTimeZone()));
+}
+
 // The "YYYY-MM-DD" dates on the site's clock from the one containing `from` to
 // the one containing `to`.
 export function siteDatesBetween(from: Date, to: Date): string[] {
   const timeZone = siteTimeZone();
-  const lastDate = formatSqlDate(wallClockInTimeZone(to, timeZone));
+  const lastDate = siteDate(to);
   const day = wallClockToNaiveDate({
     ...wallClockInTimeZone(from, timeZone),
     hour: 0,

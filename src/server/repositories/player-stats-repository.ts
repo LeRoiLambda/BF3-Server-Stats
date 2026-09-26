@@ -6,13 +6,7 @@ import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
-import { siteTimeZone } from "@/src/server/utils/site-time";
-import {
-  naiveDateToWallClock,
-  wallClockInTimeZone,
-  wallClockToInstant,
-  wallClockToNaiveDate
-} from "@/src/server/utils/time-zones";
+import { siteDate, siteDateStart } from "@/src/server/utils/site-time";
 
 export type LeaderSort = "soldierName" | "score" | "kills" | "kdr" | "hsr";
 export type SortOrder = "asc" | "desc";
@@ -109,28 +103,18 @@ async function hasAdkatsBansTable(): Promise<boolean> {
   return hasTable("adkats_bans");
 }
 
+// The site's week, from Monday 00:00 to the next, on the logger's clock,
+// which session start times are on.
 function currentWeekWindow(): {
   startSql: string;
   endSql: string;
   resetAt: string;
 } {
-  const timeZone = siteTimeZone();
-  const today = wallClockInTimeZone(new Date(), timeZone);
-  const localStart = wallClockToNaiveDate({
-    ...today,
-    hour: 0,
-    minute: 0,
-    second: 0
-  });
-  const daysSinceMonday = (localStart.getUTCDay() + 6) % 7;
-  localStart.setUTCDate(localStart.getUTCDate() - daysSinceMonday);
+  const today = siteDate(new Date());
+  const daysSinceMonday = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const start = siteDateStart(today, -daysSinceMonday);
+  const end = siteDateStart(today, 7 - daysSinceMonday);
 
-  const localEnd = new Date(localStart);
-  localEnd.setUTCDate(localEnd.getUTCDate() + 7);
-
-  const start = wallClockToInstant(naiveDateToWallClock(localStart), timeZone);
-  const end = wallClockToInstant(naiveDateToWallClock(localEnd), timeZone);
-  // Session start times are on the stats logger's clock.
   return {
     startSql: toLoggerTime(start),
     endSql: toLoggerTime(end),
