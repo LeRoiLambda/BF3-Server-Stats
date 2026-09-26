@@ -22,6 +22,23 @@ export function getDbPool(): Pool {
     connectionLimit: 10,
     queueLimit: 0
   });
+  // mysql2 escapes query values with backslashes. A server whose sql_mode has
+  // NO_BACKSLASH_ESCAPES reads a backslash as a plain character, so a quote in
+  // a value would end its string and the rest would run as SQL. Each new
+  // connection takes that mode out of its session before its first query, or
+  // is closed.
+  pool.pool.on("connection", (connection) => {
+    connection.query(
+      `SET SESSION sql_mode = TRIM(BOTH ',' FROM
+        REPLACE(CONCAT(',', @@SESSION.sql_mode, ','), ',NO_BACKSLASH_ESCAPES,', ','))`,
+      (error) => {
+        if (error) {
+          console.error(`Closing a connection that kept NO_BACKSLASH_ESCAPES: ${error.message}`);
+          connection.destroy();
+        }
+      }
+    );
+  });
 
   return pool;
 }
