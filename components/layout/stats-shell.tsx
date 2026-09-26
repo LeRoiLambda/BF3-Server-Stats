@@ -58,23 +58,21 @@ export function StatsShell({
   const battlelogHref = currentServer
     ? battlelogServerSearchHref(currentServer.serverName)
     : null;
-  const scopeSection = activeSection;
-  const allServersScopeHref = allServersHref(scopeSection);
-  const selectedScopeHref = hasServerScope
-    ? serverSectionHref(currentServerId, scopeSection)
-    : allServersScopeHref;
+  // Links to a section of the scope shown: the current server, or all.
+  const sectionHref = (section: ServerSection) =>
+    hasServerScope ? serverSectionHref(currentServerId, section) : allServersHref(section);
   const defaultScopeOptions = [
     ...servers.map((server) => ({
       label: server.serverName,
-      href: serverSectionHref(server.serverId, scopeSection),
+      href: serverSectionHref(server.serverId, activeSection),
     })),
     {
       label: "All Servers",
-      href: allServersScopeHref,
+      href: allServersHref(activeSection),
     },
   ];
   const effectiveScopeOptions = scopeOptions ?? defaultScopeOptions;
-  const effectiveScopeValue = scopeValue ?? selectedScopeHref;
+  const effectiveScopeValue = scopeValue ?? sectionHref(activeSection);
   const hasScopeSelect = scopeOptions
     ? effectiveScopeOptions.length > 1
     : hasMultipleServers;
@@ -86,14 +84,7 @@ export function StatsShell({
         <div className="rounded-t-sm border-b border-slate-600/35 bg-slate-950/90 px-4 py-4 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Link
-                href={
-                  hasServerScope
-                    ? serverSectionHref(currentServerId, "home")
-                    : allServersHref("home")
-                }
-                className="inline-flex"
-              >
+              <Link href={sectionHref("home")} className="inline-flex">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={bannerImage}
@@ -146,30 +137,20 @@ export function StatsShell({
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <nav className="flex min-w-0 flex-wrap gap-1.5 xl:flex-nowrap">
               <Link
-                href={
-                  hasServerScope
-                    ? serverSectionHref(currentServerId, "home")
-                    : allServersHref("home")
-                }
+                href={sectionHref("home")}
                 className={navButtonClass(activeSection === "home")}
               >
                 Home
               </Link>
-              {SERVER_NAV_SECTIONS.map((section) => {
-                const href = hasServerScope
-                  ? serverSectionHref(currentServerId, section)
-                  : allServersHref(section);
-
-                return (
-                  <Link
-                    key={section}
-                    href={href}
-                    className={navButtonClass(activeSection === section)}
-                  >
-                    {sectionLabel(section)}
-                  </Link>
-                );
-              })}
+              {SERVER_NAV_SECTIONS.map((section) => (
+                <Link
+                  key={section}
+                  href={sectionHref(section)}
+                  className={navButtonClass(activeSection === section)}
+                >
+                  {sectionLabel(section)}
+                </Link>
+              ))}
             </nav>
 
             <div className="flex min-w-0 justify-end xl:shrink-0">

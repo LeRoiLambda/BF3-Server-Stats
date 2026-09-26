@@ -12,6 +12,7 @@ import {
 import { getWeeklyLeaderboard } from "@/src/server/repositories/player-stats-repository";
 import { isServerOnline } from "@/src/server/repositories/server-repository";
 import {
+  allServersHref,
   getAllServersPageScope,
   serverSectionHref
 } from "@/src/server/routing/server-pages";
@@ -134,7 +135,7 @@ export default async function AllServersHomePage() {
       <WeeklyLeaderboardSection
         result={weeklyTopPlayers}
         servers={scope.context.servers}
-        fullLeadersHref="/servers/leaders?view=weekly"
+        fullLeadersHref={allServersHref("leaders", { view: "weekly" })}
         className="mt-6"
       />
     </StatsShell>
