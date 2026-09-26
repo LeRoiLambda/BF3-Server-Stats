@@ -4,6 +4,7 @@ import { getChatLog } from "@/src/server/repositories/chat-repository";
 import { getServerContext } from "@/src/server/repositories/server-repository";
 import { CHAT_PAGE_SIZE, readChatParams } from "@/src/server/routing/chat-params";
 import { parsePositiveInt } from "@/src/server/routing/params";
+import { siteTimeZone } from "@/src/server/utils/site-time";
 
 export const revalidate = 0;
 
@@ -20,7 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ messages: [], hasOlder: false, hasNewer: false, latestLoggedId: 0 });
   }
 
-  const params = readChatParams((name) => search.get(name));
+  const timeZone = siteTimeZone();
+  const params = readChatParams((name) => search.get(name), timeZone);
   const position =
     params.position.kind === "before" || params.position.kind === "after"
       ? params.position
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
   const scope = { showServer: !server, serverId: server?.serverId ?? null };
 
   return NextResponse.json({
-    messages: log.messages.map((message) => toChatMessageView(message, scope)),
+    messages: log.messages.map((message) => toChatMessageView(message, scope, timeZone)),
     hasOlder: log.hasOlder,
     hasNewer: log.hasNewer,
     latestLoggedId: log.latestLoggedId

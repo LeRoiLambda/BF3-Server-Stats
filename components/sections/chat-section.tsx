@@ -20,7 +20,8 @@ import {
   type PageScope,
   type SearchParams
 } from "@/src/server/routing/server-pages";
-import { formatSiteTime, siteTimeZone } from "@/src/server/utils/site-time";
+import { siteTimeZone } from "@/src/server/utils/site-time";
+import { formatInZone } from "@/src/server/utils/time-zones";
 
 type ChatSectionProps = {
   scope: PageScope;
@@ -54,7 +55,8 @@ function emptyLabel(params: ChatParams, filtered: boolean): string {
 
 function transcriptAnchor(
   params: ChatParams,
-  anchorId: number | null
+  anchorId: number | null,
+  timeZone: string
 ): ChatTranscriptAnchor | null {
   switch (params.position.kind) {
     case "around":
@@ -63,7 +65,7 @@ function transcriptAnchor(
       return {
         kind: "time",
         messageId: anchorId,
-        label: formatSiteTime(params.position.instant)
+        label: formatInZone(params.position.instant, timeZone)
       };
     default:
       return null;
@@ -71,7 +73,8 @@ function transcriptAnchor(
 }
 
 export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
-  const params = readChatParams((name) => firstValue(searchParams[name]));
+  const timeZone = siteTimeZone();
+  const params = readChatParams((name) => firstValue(searchParams[name]), timeZone);
   const serverId = scopeServerId(scope);
   const log = await getChatLog({
     serverIds: scope.kind === "all" ? scope.serverIds : [scope.server.serverId],
@@ -111,12 +114,14 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
         <ChatTranscript
           key={`${filterQuery}|${positionKey(params.position)}`}
           initial={{
-            messages: log.messages.map((message) => toChatMessageView(message, viewScope)),
+            messages: log.messages.map((message) =>
+              toChatMessageView(message, viewScope, timeZone)
+            ),
             hasOlder: log.hasOlder,
             hasNewer: log.hasNewer,
             latestLoggedId: log.latestLoggedId
           }}
-          anchor={transcriptAnchor(params, log.anchorId)}
+          anchor={transcriptAnchor(params, log.anchorId, timeZone)}
           positioned={params.position.kind !== "latest"}
           terms={params.terms}
           pagePath={pagePath}
@@ -125,7 +130,7 @@ export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
             ...filterValues,
             sid: serverId === null ? null : String(serverId)
           })}
-          timeZone={siteTimeZone()}
+          timeZone={timeZone}
           filtered={filtered}
           emptyLabel={emptyLabel(params, filtered)}
         />

@@ -7,7 +7,7 @@ import {
 } from "@/src/server/repositories/server-scope";
 import { fromLoggerTime, toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
-import { siteDatesBetween, siteDateStart } from "@/src/server/utils/site-time";
+import { datesInZone, dayStartInZone } from "@/src/server/utils/time-zones";
 
 export type ServerDetailStats = {
   countPlayers: number;
@@ -37,7 +37,7 @@ export type ServerRoundSnapshot = {
   leftPlayers: number;
 };
 
-// `date` is a "YYYY-MM-DD" date on the site's clock.
+// `date` is a "YYYY-MM-DD" date in the time zone the trend was read for.
 export type ServerDailyPlayersSnapshot = {
   date: string;
   averagePlayers: number;
@@ -81,14 +81,14 @@ type LoggerDateRow = RowDataPacket & {
 };
 
 type ServerDailyPlayersSnapshotRow = RowDataPacket & {
-  siteDate: string | null;
+  dayDate: string | null;
   averagePlayers: number | null;
   peakPlayers: number | null;
   roundCount: number | null;
 };
 
-// A day on the site's clock, with its start and end on the logger's clock.
-type SiteDay = {
+// A day in some time zone, with its start and end on the logger's clock.
+type ZoneDay = {
   date: string;
   start: string;
   end: string;
@@ -223,23 +223,22 @@ export async function listRecentServerRounds(
   }));
 }
 
-// A day on the site's clock overlaps at most two days on the logger's clock,
-// so the rounds of the latest 2n + 2 logger days with rounds hold at least
-// n + 1 site days with rounds. Only the earliest of those can start before
-// them.
-function loggerDateLimit(siteDayCount: number): number {
-  return siteDayCount * 2 + 2;
+// A day in any time zone overlaps at most two days on the logger's clock, so
+// the rounds of the latest 2n + 2 logger days with rounds hold at least n + 1
+// such days with rounds. Only the earliest of those can start before them.
+function loggerDateLimit(dayCount: number): number {
+  return dayCount * 2 + 2;
 }
 
-// The site's days that overlap the given days on the logger's clock.
-export function siteDaysOverlapping(loggerDates: string[]): SiteDay[] {
+// The days in `timeZone` that overlap the given days on the logger's clock.
+export function daysOverlapping(loggerDates: string[], timeZone: string): ZoneDay[] {
   const dates = new Set<string>();
 
   for (const loggerDate of loggerDates) {
     const first = fromLoggerTime(`${loggerDate} 00:00:00`);
     const last = fromLoggerTime(`${loggerDate} 23:59:59`);
     if (first && last) {
-      for (const date of siteDatesBetween(first, last)) {
+      for (const date of datesInZone(first, last, timeZone)) {
         dates.add(date);
       }
     }
@@ -249,15 +248,16 @@ export function siteDaysOverlapping(loggerDates: string[]): SiteDay[] {
     .sort()
     .map((date) => ({
       date,
-      start: toLoggerTime(siteDateStart(date)),
-      end: toLoggerTime(siteDateStart(date, 1))
+      start: toLoggerTime(dayStartInZone(date, timeZone)),
+      end: toLoggerTime(dayStartInZone(date, timeZone, 1))
     }));
 }
 
-// The latest `limit` days on the site's clock that had rounds.
+// The latest `limit` days in `timeZone` that had rounds.
 export async function listServerDailyPlayerTrend(
   input: ServerScopeInput,
-  limit = 7
+  limit: number,
+  timeZone: string
 ): Promise<ServerDailyPlayersSnapshot[]> {
   const pool = getDbPool();
   const boundedLimit = Math.max(1, Math.min(31, Math.floor(limit)));
@@ -283,7 +283,7 @@ export async function listServerDailyPlayerTrend(
   const loggerDates = dateRows
     .map((row) => row.loggerDate)
     .filter((date): date is string => fromLoggerTime(`${date} 00:00:00`) !== null);
-  const days = siteDaysOverlapping(loggerDates);
+  const days = daysOverlapping(loggerDates, timeZone);
   if (days.length === 0) {
     return [];
   }
@@ -294,14 +294,14 @@ export async function listServerDailyPlayerTrend(
       SELECT
         CASE
           ${days.map(() => "WHEN TimeMapLoad >= ? AND TimeMapLoad < ? THEN ?").join("\n          ")}
-        END AS siteDate,
+        END AS dayDate,
         AVG(MaxPlayers) AS averagePlayers,
         MAX(MaxPlayers) AS peakPlayers,
         COUNT(*) AS roundCount
       FROM tbl_mapstats
       WHERE ${roundsSql}
         AND TimeMapLoad >= ?
-      GROUP BY siteDate
+      GROUP BY dayDate
     `,
     [...days.flatMap((day) => [day.start, day.end, day.date]), ...scope.params, since]
   );
@@ -314,13 +314,13 @@ export async function listServerDailyPlayerTrend(
   );
 
   return rows
-    .filter((row): row is ServerDailyPlayersSnapshotRow & { siteDate: string } =>
-      row.siteDate !== null && completeDates.has(row.siteDate)
+    .filter((row): row is ServerDailyPlayersSnapshotRow & { dayDate: string } =>
+      row.dayDate !== null && completeDates.has(row.dayDate)
     )
-    .sort((a, b) => b.siteDate.localeCompare(a.siteDate))
+    .sort((a, b) => b.dayDate.localeCompare(a.dayDate))
     .slice(0, boundedLimit)
     .map((row) => ({
-      date: row.siteDate,
+      date: row.dayDate,
       averagePlayers: toFixedNumber(row.averagePlayers),
       peakPlayers: Number(row.peakPlayers ?? 0),
       roundCount: Number(row.roundCount ?? 0)

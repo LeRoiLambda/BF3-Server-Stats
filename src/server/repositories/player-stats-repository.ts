@@ -6,7 +6,8 @@ import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
-import { siteDate, siteDateStart } from "@/src/server/utils/site-time";
+import { siteTimeZone } from "@/src/server/utils/site-time";
+import { dateInZone, dayStartInZone } from "@/src/server/utils/time-zones";
 
 export type LeaderSort = "soldierName" | "score" | "kills" | "kdr" | "hsr";
 export type SortOrder = "asc" | "desc";
@@ -110,10 +111,11 @@ function currentWeekWindow(): {
   endSql: string;
   resetAt: string;
 } {
-  const today = siteDate(new Date());
+  const timeZone = siteTimeZone();
+  const today = dateInZone(new Date(), timeZone);
   const daysSinceMonday = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const start = siteDateStart(today, -daysSinceMonday);
-  const end = siteDateStart(today, 7 - daysSinceMonday);
+  const start = dayStartInZone(today, timeZone, -daysSinceMonday);
+  const end = dayStartInZone(today, timeZone, 7 - daysSinceMonday);
 
   return {
     startSql: toLoggerTime(start),

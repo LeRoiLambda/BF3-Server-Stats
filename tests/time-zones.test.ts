@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  dateInZone,
+  datesInZone,
+  dayStartInZone,
+  formatInZone,
   formatSqlDateTime,
+  isValidTimeZone,
   parseSqlDateTime,
   parseUtcDateTime,
   wallClockInTimeZone,
@@ -134,5 +139,68 @@ describe("parseUtcDateTime", () => {
 
   it("returns null for zero values", () => {
     expect(parseUtcDateTime("0000-00-00 00:00:00")).toBeNull();
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it("accepts IANA zones and refuses anything else", () => {
+    expect(isValidTimeZone("Europe/Paris")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+    expect(isValidTimeZone("Mars/Olympus")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
+  });
+});
+
+describe("formatInZone", () => {
+  it("labels times with the zone's abbreviation", () => {
+    expect(formatInZone(new Date("2026-09-25T16:00:00Z"), "America/Los_Angeles")).toBe(
+      "2026-09-25 09:00:00 PDT"
+    );
+    expect(formatInZone(new Date("2026-01-15T16:00:00Z"), "America/Los_Angeles")).toBe(
+      "2026-01-15 08:00:00 PST"
+    );
+  });
+
+  it("labels zones without an English abbreviation with their UTC offset", () => {
+    expect(formatInZone(new Date("2026-09-25T16:00:00Z"), "Europe/Paris")).toBe(
+      "2026-09-25 18:00:00 GMT+2"
+    );
+  });
+});
+
+describe("dateInZone", () => {
+  it("reads the date in the zone", () => {
+    expect(dateInZone(new Date("2026-09-25T06:59:59Z"), "America/Los_Angeles")).toBe("2026-09-24");
+    expect(dateInZone(new Date("2026-09-25T07:00:00Z"), "America/Los_Angeles")).toBe("2026-09-25");
+  });
+});
+
+describe("datesInZone", () => {
+  it("lists the dates in the zone", () => {
+    expect(
+      datesInZone(
+        new Date("2026-09-24T00:00:00Z"),
+        new Date("2026-09-24T23:59:59Z"),
+        "America/Los_Angeles"
+      )
+    ).toEqual(["2026-09-23", "2026-09-24"]);
+  });
+});
+
+describe("dayStartInZone", () => {
+  it("finds midnight in the zone", () => {
+    expect(dayStartInZone("2026-09-24", "America/Los_Angeles").toISOString()).toBe(
+      "2026-09-24T07:00:00.000Z"
+    );
+    // 1 November 2026 lasts 25 hours in Los Angeles.
+    expect(dayStartInZone("2026-11-01", "America/Los_Angeles", 1).toISOString()).toBe(
+      "2026-11-02T08:00:00.000Z"
+    );
+  });
+
+  it("starts a day whose midnight clocks skip when they resume", () => {
+    expect(dayStartInZone("2026-09-06", "America/Santiago").toISOString()).toBe(
+      "2026-09-06T04:00:00.000Z"
+    );
   });
 });

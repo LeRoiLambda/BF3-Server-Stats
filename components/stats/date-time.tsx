@@ -1,4 +1,5 @@
-import { formatSiteTime } from "@/src/server/utils/site-time";
+import { siteTimeZone } from "@/src/server/utils/site-time";
+import { formatInZone } from "@/src/server/utils/time-zones";
 
 type DateTimeProps = {
   value: Date | null;
@@ -14,7 +15,7 @@ export function DateTime({ value, fallback = "Unknown", className }: DateTimePro
 
   return (
     <time dateTime={value.toISOString()} className={className}>
-      {formatSiteTime(value)}
+      {formatInZone(value, siteTimeZone())}
     </time>
   );
 }

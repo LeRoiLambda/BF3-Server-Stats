@@ -5,8 +5,11 @@ import {
 } from "@/src/server/domain/bf3-reference";
 import type { ChatMessage } from "@/src/server/repositories/chat-repository";
 import { serverSectionHref } from "@/src/server/routing/server-pages";
-import { formatSiteTime, siteTimeZone } from "@/src/server/utils/site-time";
-import { formatSqlDateTime, wallClockInTimeZone } from "@/src/server/utils/time-zones";
+import {
+  formatInZone,
+  formatSqlDateTime,
+  wallClockInTimeZone
+} from "@/src/server/utils/time-zones";
 
 export type ChatChannelTone = "global" | "team" | "squad" | "other";
 
@@ -78,11 +81,11 @@ function channelTone(subset: string | null): ChatChannelTone {
 
 export function toChatMessageView(
   message: ChatMessage,
-  scope: ChatMessageViewScope
+  scope: ChatMessageViewScope,
+  timeZone: string
 ): ChatMessageView {
-  const timeZone = siteTimeZone();
   const sentAt = message.sentAt;
-  const siteTime = sentAt ? formatSqlDateTime(wallClockInTimeZone(sentAt, timeZone)) : null;
+  const wallTime = sentAt ? formatSqlDateTime(wallClockInTimeZone(sentAt, timeZone)) : null;
   const fromServer = message.playerId === null && message.speaker === "Server";
 
   return {
@@ -103,13 +106,13 @@ export function toChatMessageView(
     banStatus: message.banStatus,
     text: message.text,
     sentAt:
-      sentAt && siteTime
+      sentAt && wallTime
         ? {
             iso: sentAt.toISOString(),
-            day: siteTime.slice(0, 10),
+            day: wallTime.slice(0, 10),
             dayLabel: dayLabel(sentAt, timeZone),
-            clock: siteTime.slice(11),
-            label: formatSiteTime(sentAt)
+            clock: wallTime.slice(11),
+            label: formatInZone(sentAt, timeZone)
           }
         : null,
     contextHref: serverSectionHref(message.serverId, "chat", { msg: message.id })

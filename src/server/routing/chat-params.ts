@@ -1,4 +1,3 @@
-import { siteTimeZone } from "@/src/server/utils/site-time";
 import { parseSqlDateTime, wallClockToInstant } from "@/src/server/utils/time-zones";
 
 export type ChatChannel = "global" | "team" | "squad";
@@ -76,9 +75,9 @@ function parsePositiveId(value: string | null): number | null {
 }
 
 // "2026-09-25T21:00", as a datetime-local field sends it, or "2026-09-25",
-// read on the site's clock. Years before 1970 or after 9998 are refused:
-// the logger's clock must stay within the database's DATETIME range.
-export function parseChatJumpTo(value: string): Date | null {
+// read in `timeZone`. Years before 1970 or after 9998 are refused: the
+// logger's clock must stay within the database's DATETIME range.
+export function parseChatJumpTo(value: string, timeZone: string): Date | null {
   const match = JUMP_TO_PATTERN.exec(value.trim());
   if (!match) {
     return null;
@@ -90,16 +89,20 @@ export function parseChatJumpTo(value: string): Date | null {
     return null;
   }
 
-  return wallClockToInstant(wallClock, siteTimeZone());
+  return wallClockToInstant(wallClock, timeZone);
 }
 
-function readPosition(get: (name: string) => string | null, jumpTo: string): ChatPosition {
+function readPosition(
+  get: (name: string) => string | null,
+  jumpTo: string,
+  timeZone: string
+): ChatPosition {
   const around = parsePositiveId(get("msg"));
   if (around !== null) {
     return { kind: "around", messageId: around };
   }
 
-  const instant = jumpTo ? parseChatJumpTo(jumpTo) : null;
+  const instant = jumpTo ? parseChatJumpTo(jumpTo, timeZone) : null;
   if (instant) {
     return { kind: "at", instant };
   }
@@ -118,8 +121,12 @@ function readPosition(get: (name: string) => string | null, jumpTo: string): Cha
 }
 
 // Reads the chat page's query: q, player and channel filter the messages;
-// msg, at, before and after place them, in that order of precedence.
-export function readChatParams(get: (name: string) => string | null): ChatParams {
+// msg, at, before and after place them, in that order of precedence. Dates
+// and times are read in `timeZone`.
+export function readChatParams(
+  get: (name: string) => string | null,
+  timeZone: string
+): ChatParams {
   const text = get("q")?.trim() ?? "";
   const jumpTo = get("at")?.trim() ?? "";
 
@@ -128,7 +135,7 @@ export function readChatParams(get: (name: string) => string | null): ChatParams
     terms: parseChatTerms(text),
     playerId: parsePositiveId(get("player")),
     channel: parseChatChannel(get("channel")),
-    position: readPosition(get, jumpTo),
+    position: readPosition(get, jumpTo, timeZone),
     jumpTo
   };
 }

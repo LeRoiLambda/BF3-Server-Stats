@@ -13,9 +13,20 @@ const MS_PER_DAY = 86_400_000;
 
 // Building a formatter costs far more than using one, so each zone gets one.
 const wallClockFormats = new Map<string, Intl.DateTimeFormat>();
+const zoneNameFormats = new Map<string, Intl.DateTimeFormat>();
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
+}
+
+// Whether `value` names a time zone Intl knows, such as "Europe/Paris".
+export function isValidTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function wallClockFormat(timeZone: string): Intl.DateTimeFormat {
@@ -138,4 +149,60 @@ export function parseSqlDateTime(value: unknown): WallClock | null {
 export function parseUtcDateTime(value: unknown): Date | null {
   const wallClock = parseSqlDateTime(value);
   return wallClock ? wallClockToNaiveDate(wallClock) : null;
+}
+
+function zoneName(instant: Date, timeZone: string): string {
+  let format = zoneNameFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" });
+    zoneNameFormats.set(timeZone, format);
+  }
+
+  return (
+    format.formatToParts(instant).find((part) => part.type === "timeZoneName")?.value ??
+    timeZone
+  );
+}
+
+// "2026-09-25 09:00:00 PDT": the time in `timeZone`, followed by the zone's
+// abbreviation or, for zones without one in English, its UTC offset.
+export function formatInZone(instant: Date, timeZone: string): string {
+  return `${formatSqlDateTime(wallClockInTimeZone(instant, timeZone))} ${zoneName(instant, timeZone)}`;
+}
+
+// The "YYYY-MM-DD" date in `timeZone` at `instant`.
+export function dateInZone(instant: Date, timeZone: string): string {
+  return formatSqlDate(wallClockInTimeZone(instant, timeZone));
+}
+
+// The "YYYY-MM-DD" dates in `timeZone` from the one containing `from` to the
+// one containing `to`.
+export function datesInZone(from: Date, to: Date, timeZone: string): string[] {
+  const lastDate = dateInZone(to, timeZone);
+  const day = wallClockToNaiveDate({
+    ...wallClockInTimeZone(from, timeZone),
+    hour: 0,
+    minute: 0,
+    second: 0
+  });
+  const dates: string[] = [];
+
+  let date = formatSqlDate(naiveDateToWallClock(day));
+  while (date <= lastDate) {
+    dates.push(date);
+    day.setUTCDate(day.getUTCDate() + 1);
+    date = formatSqlDate(naiveDateToWallClock(day));
+  }
+
+  return dates;
+}
+
+// The instant a "YYYY-MM-DD" date starts in `timeZone`, `days` days later.
+export function dayStartInZone(date: string, timeZone: string, days = 0): Date {
+  const [year, month, day] = date.split("-").map(Number);
+
+  return wallClockToInstant(
+    naiveDateToWallClock(new Date(Date.UTC(year, month - 1, day + days))),
+    timeZone
+  );
 }
