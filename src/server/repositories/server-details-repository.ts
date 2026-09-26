@@ -3,7 +3,6 @@ import { getDbPool } from "@/src/server/db/pool";
 import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import {
   buildServerScopeCondition,
-  normalizeServerScopeInput,
   type ServerScopeInput
 } from "@/src/server/repositories/server-scope";
 import { fromLoggerTime, toLoggerTime } from "@/src/server/utils/logger-clock";
@@ -96,13 +95,12 @@ type SiteDay = {
 };
 
 export async function getServerDetailStats(
-  input: number | ServerScopeInput
+  input: ServerScopeInput
 ): Promise<ServerDetailStats | null> {
   const pool = getDbPool();
-  const scopeInput = normalizeServerScopeInput(input);
-  const scope = buildServerScopeCondition("ServerID", scopeInput);
-  const playerScope = buildServerScopeCondition("tsp.ServerID", scopeInput);
-  const hasAllServersScope = (scopeInput.serverIds?.length ?? 0) > 0;
+  const scope = buildServerScopeCondition("ServerID", input);
+  const playerScope = buildServerScopeCondition("tsp.ServerID", input);
+  const hasAllServersScope = (input.serverIds?.length ?? 0) > 0;
   // Players on several servers count once: tbl_server_player has one row per
   // player and server.
   const statsQuery = pool.query<ServerDetailStatsRow[]>(
@@ -183,7 +181,7 @@ export async function getServerDetailStats(
 }
 
 export async function listRecentServerRounds(
-  input: number | ServerScopeInput,
+  input: ServerScopeInput,
   limit = 15
 ): Promise<ServerRoundSnapshot[]> {
   const pool = getDbPool();
@@ -258,7 +256,7 @@ export function siteDaysOverlapping(loggerDates: string[]): SiteDay[] {
 
 // The latest `limit` days on the site's clock that had rounds.
 export async function listServerDailyPlayerTrend(
-  input: number | ServerScopeInput,
+  input: ServerScopeInput,
   limit = 7
 ): Promise<ServerDailyPlayersSnapshot[]> {
   const pool = getDbPool();
