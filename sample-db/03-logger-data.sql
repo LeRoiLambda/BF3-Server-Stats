@@ -1,5 +1,5 @@
--- Sample stats logger data. Times are relative to when this file is loaded and
--- written in UTC, so the site needs BF3_STATS_LOGGER_TIME_ZONE=UTC.
+-- Times are relative to when this file is loaded and written in UTC, so the
+-- site needs BF3_STATS_LOGGER_TIME_ZONE=UTC.
 
 SET NAMES utf8mb4;
 
@@ -23,7 +23,6 @@ VALUES
   (2, 0, '203.0.113.10:25300', 'Sample Close Quarters Server', 1, 8, 32, 'MP_Subway', 'Operation Metro', 'TeamDeathMatch0', NULL),
   (3, 0, '203.0.113.20:25200', 'Retired Server', 1, 0, 32, 'MP_001', 'Grand Bazaar', 'RushLarge0', 'off');
 
--- Players with a specific role in the sample, then 240 generated players.
 INSERT INTO tbl_playerdata (PlayerID, GameID, ClanTag, SoldierName, GlobalRank, CountryCode) VALUES
   (1, 1, NULL, 'Alex', 12, 'us'),
   (2, 1, 'SMPL', 'SuperAlex1', 145, 'de'),
@@ -134,7 +133,6 @@ FROM tbl_playerstats ps
 INNER JOIN tbl_server_player sp ON sp.StatsID = ps.StatsID
 GROUP BY sp.ServerID;
 
--- Completed sessions over the last twelve days, one to three per player.
 INSERT INTO tbl_sessions
   (StatsID, StartTime, EndTime, Score, Kills, Headshots, Deaths, TKs, Suicide, RoundCount,
    Playtime, Killstreak, Deathstreak, HighScore, Wins, Losses)
@@ -194,7 +192,6 @@ INSERT INTO tbl_teamscores (ServerID, TeamID, Score, WinningScore) VALUES
   (2, 1, 64, 100),
   (2, 2, 71, 100);
 
--- One row per round: two rounds per map, most recent first.
 INSERT INTO tbl_mapstats
   (ServerID, TimeMapLoad, TimeRoundStarted, TimeRoundEnd, MapName, Gamemode, Roundcount,
    NumberofRounds, MinPlayers, AvgPlayers, MaxPlayers, PlayersJoinedServer, PlayersLeftServer)

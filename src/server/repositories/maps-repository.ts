@@ -12,7 +12,6 @@ export type MapBreakdown = {
   mapCode: string;
   numberOfRounds: number;
   averagePlayers: number;
-  // Players who joined per player who left, as a percentage; null when nobody left.
   joinsPerLeavePercent: number | null;
 };
 

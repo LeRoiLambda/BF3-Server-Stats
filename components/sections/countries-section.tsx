@@ -28,7 +28,6 @@ type CountriesSectionProps = {
   searchParams: SearchParams;
 };
 
-// ?c= lists the country tabs to show; ?country= selects one of them.
 function parseTabCodes(searchParams: SearchParams): string[] {
   return Array.from(
     new Set(

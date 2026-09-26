@@ -1,5 +1,4 @@
--- Sample AdKats data for the players of 03-logger-data.sql. Record times are
--- in UTC, as AdKats writes them.
+-- Record times are in UTC, as AdKats writes them.
 
 SET NAMES utf8mb4;
 

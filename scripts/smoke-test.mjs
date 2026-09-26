@@ -1,5 +1,3 @@
-// Usage: node scripts/smoke-test.mjs <base URL> [more base URLs...]
-
 const SERVER_IDS = [1, 2];
 
 const ROUTES = [

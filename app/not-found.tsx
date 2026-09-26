@@ -7,7 +7,6 @@ import { getServerContext } from "@/src/server/repositories/server-repository";
 export default async function NotFound() {
   const context = await getServerContext();
 
-  // With no active servers every stats page 404s; /servers explains why.
   if (context.servers.length === 0) {
     return (
       <main className="mx-auto max-w-3xl py-16 sm:px-8">

@@ -90,7 +90,6 @@ function findLiveIndex(
   return (flaggedMatch ?? matchingIndexes[0])?.index ?? -1;
 }
 
-// `selection` is a rotation index, or null for the live map.
 function buildRotationContext(
   rotation: MapRotationEntry[],
   currentMapCode: string | null,

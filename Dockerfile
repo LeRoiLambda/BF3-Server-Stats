@@ -12,8 +12,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-# The standalone bundle as plain files, for hosts that run Node.js directly:
-#   docker build --platform linux/amd64 --target bundle --output dist .
 FROM scratch AS bundle
 COPY --from=build /app/.next/standalone /
 
