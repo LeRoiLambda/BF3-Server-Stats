@@ -29,7 +29,7 @@ export function toLoggerTime(instant: Date): string {
 
 // The instant a value stamped by the stats logger stands for. Zero and
 // malformed values return null. A value from the hour the Procon host's clock
-// goes back maps to one of that hour's two instants.
+// goes back maps to the first of that hour's two instants.
 export function fromLoggerTime(value: unknown): Date | null {
   const loggerTime = parseSqlDateTime(value);
   if (!loggerTime) {

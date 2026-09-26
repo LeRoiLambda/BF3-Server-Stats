@@ -67,6 +67,42 @@ describe("wallClockToInstant", () => {
       "2026-03-29T01:30:00.000Z"
     );
   });
+
+  it("moves times that clocks skip forward, past the change", () => {
+    const at = (month: number, day: number, hour: number, minute: number) => ({
+      year: 2026,
+      month,
+      day,
+      hour,
+      minute,
+      second: 0
+    });
+
+    // 02:00 to 02:59 do not exist in Los Angeles on 8 March, nor in Paris on
+    // 29 March: 02:30 is 03:30 PDT and 03:30 CEST.
+    for (const minute of [0, 3, 30, 59]) {
+      expect(wallClockToInstant(at(3, 8, 2, minute), "America/Los_Angeles").toISOString()).toBe(
+        `2026-03-08T10:${String(minute).padStart(2, "0")}:00.000Z`
+      );
+    }
+    expect(wallClockToInstant(at(3, 29, 2, 30), "Europe/Paris").toISOString()).toBe(
+      "2026-03-29T01:30:00.000Z"
+    );
+    // Santiago skips midnight on 6 September: the day starts at 01:00 -03.
+    expect(wallClockToInstant(at(9, 6, 0, 0), "America/Santiago").toISOString()).toBe(
+      "2026-09-06T04:00:00.000Z"
+    );
+  });
+
+  it("finds the first of two times when clocks go back", () => {
+    // 01:30 happens twice in Los Angeles on 1 November, first as PDT.
+    expect(
+      wallClockToInstant(
+        { year: 2026, month: 11, day: 1, hour: 1, minute: 30, second: 0 },
+        "America/Los_Angeles"
+      ).toISOString()
+    ).toBe("2026-11-01T08:30:00.000Z");
+  });
 });
 
 describe("parseSqlDateTime", () => {

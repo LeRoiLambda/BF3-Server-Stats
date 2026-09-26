@@ -9,6 +9,8 @@ export type WallClock = {
 
 const SQL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/;
 
+const MS_PER_DAY = 86_400_000;
+
 // Building a formatter costs far more than using one, so each zone gets one.
 const wallClockFormats = new Map<string, Intl.DateTimeFormat>();
 
@@ -52,21 +54,30 @@ export function wallClockInTimeZone(date: Date, timeZone: string): WallClock {
   };
 }
 
-// Finds the instant at which the given wall-clock time occurs in `timeZone`.
-// The second pass corrects the offset when a daylight saving change falls
-// between the first guess and the instant.
+// The zone's offset from UTC at `instant`, in milliseconds.
+function offsetAt(instant: number, timeZone: string): number {
+  const wallClock = wallClockInTimeZone(new Date(instant), timeZone);
+  return wallClockToNaiveDate(wallClock).getTime() - instant;
+}
+
+// Finds the instant at which the given wall-clock time occurs in `timeZone`,
+// trying the offsets in force a day before and a day after it. A time that
+// occurs twice, when clocks go back, gives the earlier instant. A time that
+// clocks skip when they go forward is read with the offset in force before
+// the change, which moves it forward: 02:30 on the day Los Angeles moves to
+// PDT is 03:30 PDT, and a day whose midnight is skipped, as in Santiago,
+// starts at 01:00.
 export function wallClockToInstant(wallClock: WallClock, timeZone: string): Date {
   const wallTime = wallClockToNaiveDate(wallClock).getTime();
-  let instant = wallTime;
+  const offsetBefore = offsetAt(wallTime - MS_PER_DAY, timeZone);
+  const offsetAfter = offsetAt(wallTime + MS_PER_DAY, timeZone);
+  const occurrences = [wallTime - offsetBefore, wallTime - offsetAfter].filter(
+    (instant) => offsetAt(instant, timeZone) === wallTime - instant
+  );
 
-  for (let pass = 0; pass < 2; pass += 1) {
-    const offset =
-      wallClockToNaiveDate(wallClockInTimeZone(new Date(instant), timeZone)).getTime() -
-      instant;
-    instant = wallTime - offset;
-  }
-
-  return new Date(instant);
+  return new Date(
+    occurrences.length > 0 ? Math.min(...occurrences) : wallTime - offsetBefore
+  );
 }
 
 // Calendar arithmetic on wall-clock values without any time zone: the value is

@@ -45,4 +45,10 @@ describe("siteDateStart", () => {
     // 1 November 2026 lasts 25 hours in Los Angeles.
     expect(siteDateStart("2026-11-01", 1).toISOString()).toBe("2026-11-02T08:00:00.000Z");
   });
+
+  it("starts a day whose midnight clocks skip when they resume", async () => {
+    const { siteDateStart } = await siteClock("America/Santiago");
+
+    expect(siteDateStart("2026-09-06").toISOString()).toBe("2026-09-06T04:00:00.000Z");
+  });
 });
