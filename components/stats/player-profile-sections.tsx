@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { SegmentedTabs } from "@/components/layout/segmented-tabs";
+import { SegmentedToggleGroup } from "@/components/layout/segmented-toggle-group";
 import { ui } from "@/components/layout/stats-ui";
 import {
   PlayerTableCellLink,
@@ -124,7 +124,7 @@ export function PlayerProfileSections({
         </div>
 
         {weaponCategories.length > 0 ? (
-          <SegmentedTabs
+          <SegmentedToggleGroup
             label="Weapon category"
             className="mb-4"
             value={selectedWeaponCategory}
@@ -207,7 +207,7 @@ export function PlayerProfileSections({
           <h2 className={ui.sectionTitle}>
             Dog Tags
           </h2>
-          <SegmentedTabs
+          <SegmentedToggleGroup
             label="Dog tag view"
             value={tagView}
             onChange={(value) => {
