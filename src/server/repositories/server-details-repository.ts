@@ -50,7 +50,6 @@ type ServerDetailStatsRow = RowDataPacket & {
   countPlayers: number | null;
   totalKills: number | null;
   totalDeaths: number | null;
-  totalRounds: number | null;
   averageScore: number | null;
   averageKills: number | null;
   averageHeadshots: number | null;
@@ -72,6 +71,10 @@ type ServerRoundSnapshotRow = RowDataPacket & {
   maxPlayers: number | null;
   joinedPlayers: number | null;
   leftPlayers: number | null;
+};
+
+type RoundCountRow = RowDataPacket & {
+  totalRounds: number | null;
 };
 
 type LoggerDateRow = RowDataPacket & {
@@ -100,14 +103,13 @@ export async function getServerDetailStats(
   const scope = buildServerScopeCondition("ServerID", scopeInput);
   const playerScope = buildServerScopeCondition("tsp.ServerID", scopeInput);
   const hasAllServersScope = (scopeInput.serverIds?.length ?? 0) > 0;
-  const [rows] = await pool.query<ServerDetailStatsRow[]>(
+  const statsQuery = pool.query<ServerDetailStatsRow[]>(
     hasAllServersScope
       ? `
         SELECT
           MAX(players.countPlayers) AS countPlayers,
           SUM(SumKills) AS totalKills,
           SUM(SumDeaths) AS totalDeaths,
-          SUM(SumRounds) AS totalRounds,
           (SUM(SumScore) / NULLIF(MAX(players.countPlayers), 0)) AS averageScore,
           (SUM(SumKills) / NULLIF(MAX(players.countPlayers), 0)) AS averageKills,
           (SUM(SumHeadshots) / NULLIF(MAX(players.countPlayers), 0)) AS averageHeadshots,
@@ -130,7 +132,6 @@ export async function getServerDetailStats(
           CountPlayers AS countPlayers,
           SumKills AS totalKills,
           SumDeaths AS totalDeaths,
-          SumRounds AS totalRounds,
           AvgScore AS averageScore,
           AvgKills AS averageKills,
           AvgHeadshots AS averageHeadshots,
@@ -145,6 +146,19 @@ export async function getServerDetailStats(
       `,
     hasAllServersScope ? [...playerScope.params, ...scope.params] : scope.params
   );
+  // Rounds played, as on the maps page: tbl_mapstats has a row per round,
+  // while tbl_server_stats.SumRounds adds up every player's rounds.
+  const roundsQuery = pool.query<RoundCountRow[]>(
+    `
+      SELECT COUNT(*) AS totalRounds
+      FROM tbl_mapstats
+      WHERE ${scope.sql}
+        AND Gamemode != ''
+        AND MapName != ''
+    `,
+    scope.params
+  );
+  const [[rows], [roundRows]] = await Promise.all([statsQuery, roundsQuery]);
 
   const row = rows[0];
   if (!row || row.countPlayers === null || row.countPlayers === undefined) {
@@ -155,7 +169,7 @@ export async function getServerDetailStats(
     countPlayers: Number(row.countPlayers ?? 0),
     totalKills: Number(row.totalKills ?? 0),
     totalDeaths: Number(row.totalDeaths ?? 0),
-    totalRounds: Number(row.totalRounds ?? 0),
+    totalRounds: Number(roundRows[0]?.totalRounds ?? 0),
     averageScore: toFixedNumber(row.averageScore),
     averageKills: toFixedNumber(row.averageKills),
     averageHeadshots: toFixedNumber(row.averageHeadshots),
