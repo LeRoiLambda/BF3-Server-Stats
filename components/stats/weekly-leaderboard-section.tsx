@@ -20,9 +20,12 @@ import type {
   LeaderboardPlayer,
   WeeklyLeaderboardResult
 } from "@/src/server/repositories/player-stats-repository";
+import type { ActiveServer } from "@/src/server/repositories/server-repository";
 
 type WeeklyLeaderboardSectionProps = Readonly<{
   result: WeeklyLeaderboardResult;
+  // The listed servers, to name those left out of the ranking.
+  servers: ActiveServer[];
   fullLeadersHref: string;
   serverId?: number | null;
   as?: "article" | "section";
@@ -273,8 +276,32 @@ function WeeklyLeaderboardTable({
   );
 }
 
+const serverNameList = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+// Names the servers a ranking leaves out because they save no sessions.
+export function WeeklyUnrankedServersNote({
+  result,
+  servers
+}: Readonly<{ result: WeeklyLeaderboardResult; servers: ActiveServer[] }>) {
+  const names = result.serverIdsWithoutSessions.map(
+    (serverId) =>
+      servers.find((server) => server.serverId === serverId)?.serverName ?? `Server #${serverId}`
+  );
+  if (!result.available || names.length === 0) {
+    return null;
+  }
+
+  return (
+    <p className="mt-3 text-xs text-slate-400">
+      {serverNameList.format(names)} {names.length === 1 ? "is" : "are"} not ranked: the stats
+      logger saves no sessions there.
+    </p>
+  );
+}
+
 export function WeeklyLeaderboardSection({
   result,
+  servers,
   fullLeadersHref,
   serverId = null,
   as: Container = "section",
@@ -324,6 +351,7 @@ export function WeeklyLeaderboardSection({
           ) : null}
         </>
       )}
+      <WeeklyUnrankedServersNote result={result} servers={servers} />
     </Container>
   );
 }

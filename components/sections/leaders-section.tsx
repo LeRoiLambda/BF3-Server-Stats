@@ -12,11 +12,11 @@ import {
   playerTableRowClass
 } from "@/components/stats/player-link";
 import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
+import { WeeklyUnrankedServersNote } from "@/components/stats/weekly-leaderboard-section";
 import {
   getAllServersLeaderboard,
-  getAllServersWeeklyLeaderboard,
   getServerLeaderboard,
-  getWeeklyServerLeaderboard,
+  getWeeklyLeaderboard,
   parseLeaderboardPage,
   parseLeaderSort,
   parseSortOrder,
@@ -58,17 +58,11 @@ function loadLeaderboard(
 }
 
 function loadWeeklyLeaderboard(scope: PageScope) {
-  return scope.kind === "all"
-    ? getAllServersWeeklyLeaderboard({
-        serverIds: scope.serverIds,
-        gameId: scope.gameId,
-        limit: 20
-      })
-    : getWeeklyServerLeaderboard({
-        serverId: scope.server.serverId,
-        gameId: scope.gameId,
-        limit: 20
-      });
+  return getWeeklyLeaderboard({
+    serverIds: scope.kind === "all" ? scope.serverIds : [scope.server.serverId],
+    gameId: scope.gameId,
+    limit: 20
+  });
 }
 
 export async function LeadersSection({ scope, searchParams }: LeadersSectionProps) {
@@ -266,6 +260,9 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
               })
             }
           />
+        ) : null}
+        {weeklyResult ? (
+          <WeeklyUnrankedServersNote result={weeklyResult} servers={scope.context.servers} />
         ) : null}
       </section>
     </StatsShell>

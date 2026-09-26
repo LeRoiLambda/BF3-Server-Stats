@@ -1,12 +1,9 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
-import { hasTable, hasTableRows } from "@/src/server/db/schema";
+import { hasServerSessions, hasTable } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
 import { perAtLeastOneSql } from "@/src/server/db/ratios";
-import {
-  buildServerScopeCondition,
-  type ServerScopeInput
-} from "@/src/server/repositories/server-scope";
+import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 import { siteTimeZone } from "@/src/server/utils/site-time";
@@ -63,9 +60,12 @@ export type LeaderboardResult = {
 };
 
 export type WeeklyLeaderboardResult = {
+  // False when none of the servers has session history.
   available: boolean;
   players: LeaderboardPlayer[];
   resetAt: string;
+  // Servers left out of the ranking because they have no session history.
+  serverIdsWithoutSessions: number[];
 };
 
 type PlayerRow = RowDataPacket & {
@@ -133,12 +133,6 @@ const CURRENT_PLAYER_SORT_SQL: Record<CurrentPlayerSort, string> = {
 
 async function hasAdkatsBansTable(): Promise<boolean> {
   return hasTable("adkats_bans");
-}
-
-// The logger always creates tbl_sessions but only fills it when its "Session
-// ON?" and "Save Sessiondata to DB?" settings are enabled.
-async function hasSessionHistory(): Promise<boolean> {
-  return hasTableRows("tbl_sessions");
 }
 
 function currentWeekWindow(): {
@@ -462,28 +456,33 @@ export async function getAllServersLeaderboard(
   };
 }
 
-async function getWeeklyLeaderboard(
-  scopeInput: ServerScopeInput,
-  gameId: number,
-  limit: number | undefined
-): Promise<WeeklyLeaderboardResult> {
+// The week's top players on the given servers, from their completed sessions:
+// a session row covers a whole visit and is written when the player leaves.
+export async function getWeeklyLeaderboard(input: {
+  serverIds: number[];
+  gameId: number;
+  limit?: number;
+}): Promise<WeeklyLeaderboardResult> {
   const weekWindow = currentWeekWindow();
-  const sessionsAvailable = await hasSessionHistory();
-  if (!sessionsAvailable) {
+  const serverIds = Array.from(
+    new Set(input.serverIds.filter((serverId) => Number.isInteger(serverId) && serverId > 0))
+  );
+  const sessionFlags = await Promise.all(serverIds.map(hasServerSessions));
+  const rankedServerIds = serverIds.filter((_, index) => sessionFlags[index]);
+  const serverIdsWithoutSessions = serverIds.filter((_, index) => !sessionFlags[index]);
+  if (rankedServerIds.length === 0) {
     return {
       available: false,
       players: [],
-      resetAt: weekWindow.resetAt
+      resetAt: weekWindow.resetAt,
+      serverIdsWithoutSessions
     };
   }
 
   const pool = getDbPool();
   const adkatsAvailable = await hasAdkatsBansTable();
-  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit ?? 20)));
-  const scope = buildServerScopeCondition("tsp.ServerID", scopeInput);
-
-  // Completed sessions only: a session row covers a whole visit and is written
-  // when the player leaves.
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 20)));
+  const scope = buildServerScopeCondition("tsp.ServerID", { serverIds: rankedServerIds });
   const [rows] = await pool.query<PlayerRow[]>(
     `
       SELECT
@@ -509,7 +508,7 @@ async function getWeeklyLeaderboard(
     `,
     [
       ...scope.params,
-      gameId,
+      input.gameId,
       weekWindow.startSql,
       weekWindow.endSql,
       safeLimit
@@ -519,43 +518,9 @@ async function getWeeklyLeaderboard(
   return {
     available: true,
     players: rows.map(toLeaderboardPlayer),
-    resetAt: weekWindow.resetAt
+    resetAt: weekWindow.resetAt,
+    serverIdsWithoutSessions
   };
-}
-
-export async function getWeeklyServerLeaderboard(input: {
-  serverId: number;
-  gameId: number;
-  limit?: number;
-}): Promise<WeeklyLeaderboardResult> {
-  return getWeeklyLeaderboard(
-    { serverId: input.serverId },
-    input.gameId,
-    input.limit
-  );
-}
-
-export async function getAllServersWeeklyLeaderboard(input: {
-  serverIds: number[];
-  gameId: number;
-  limit?: number;
-}): Promise<WeeklyLeaderboardResult> {
-  const serverIds = Array.from(
-    new Set(
-      input.serverIds
-        .map((serverId) => Number(serverId))
-        .filter((serverId) => Number.isFinite(serverId) && serverId > 0)
-    )
-  );
-  if (serverIds.length === 0) {
-    return {
-      available: true,
-      players: [],
-      resetAt: currentWeekWindow().resetAt
-    };
-  }
-
-  return getWeeklyLeaderboard({ serverIds }, input.gameId, input.limit);
 }
 
 export async function listCurrentPlayersByServer(input: {

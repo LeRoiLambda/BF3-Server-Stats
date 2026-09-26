@@ -11,7 +11,7 @@ import {
 import { WeeklyLeaderboardSection } from "@/components/stats/weekly-leaderboard-section";
 import { listServerMapRotation } from "@/src/server/repositories/map-rotation-repository";
 import {
-  getWeeklyServerLeaderboard,
+  getWeeklyLeaderboard,
   listCurrentPlayersByServer,
   parseCurrentPlayerOrder,
   parseCurrentPlayerSort,
@@ -100,8 +100,8 @@ export default async function ServerHomePage({ params, searchParams }: ServerPag
   const [teamScores, weeklyTopPlayers, currentPlayers, mapRotation] =
     await Promise.all([
       listTeamScores(server.serverId),
-      getWeeklyServerLeaderboard({
-        serverId: server.serverId,
+      getWeeklyLeaderboard({
+        serverIds: [server.serverId],
         gameId: server.gameId,
         limit: 20
       }),
@@ -299,6 +299,7 @@ export default async function ServerHomePage({ params, searchParams }: ServerPag
 
         <WeeklyLeaderboardSection
           result={weeklyTopPlayers}
+          servers={context.servers}
           fullLeadersHref={fullLeadersHref}
           serverId={server.serverId}
           as="article"

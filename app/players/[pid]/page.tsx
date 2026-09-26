@@ -28,8 +28,7 @@ import {
   type PlayerWeapon
 } from "@/src/server/repositories/player-profile-repository";
 import {
-  getAllServersWeeklyLeaderboard,
-  getWeeklyServerLeaderboard,
+  getWeeklyLeaderboard,
   type LeaderboardPlayer
 } from "@/src/server/repositories/player-stats-repository";
 import { getPlayerModerationSummary } from "@/src/server/repositories/moderation-repository";
@@ -177,17 +176,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         activeServerIds: profileScope.serverIds,
         recentLimit: 5
       }),
-      serverScope === null
-        ? getAllServersWeeklyLeaderboard({
-            serverIds: context.servers.map((server) => server.serverId),
-            gameId,
-            limit: 3
-          })
-        : getWeeklyServerLeaderboard({
-            serverId: serverScope.serverId,
-            gameId,
-            limit: 3
-          })
+      getWeeklyLeaderboard({
+        serverIds:
+          serverScope === null
+            ? context.servers.map((server) => server.serverId)
+            : [serverScope.serverId],
+        gameId,
+        limit: 3
+      })
     ]);
 
   if (!profile) {
