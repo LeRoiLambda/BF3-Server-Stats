@@ -260,26 +260,29 @@ INNER JOIN tbl_server_player victim
   AND victim.StatsID IN (killer.StatsID + 1, killer.StatsID + 4)
 WHERE killer.ServerID = 1 AND killer.StatsID MOD 3 = 0;
 
+-- The logger inserts chat lines as they are sent, so ids follow time.
 INSERT INTO tbl_chatlog (logDate, ServerID, logSubset, logSoldierName, logMessage)
-SELECT
-  UTC_TIMESTAMP() - INTERVAL (n * 53 + 7) MINUTE,
-  1 + n MOD 2,
-  ELT(1 + n MOD 5, 'Global', 'Global', 'Team', 'Squad', 'Global'),
-  (SELECT SoldierName FROM tbl_playerdata WHERE PlayerID = 101 + (n * 7) MOD 240),
-  ELT(1 + n MOD 16, 'gg', 'nice shot', 'ak 47 is too strong', 'top 10 this week!',
-      'who is on the tank?', 'push the flag', 'medic!', 'anyone has ammo?',
-      'thanks for the revive', 'lag?', 'gg wp', 'nice round', 'rush B',
-      'that sniper on the hill...', 'need a pilot', 'ready up')
-FROM sample_numbers
-WHERE n < 240;
-
-INSERT INTO tbl_chatlog (logDate, ServerID, logSubset, logSoldierName, logMessage) VALUES
-  (UTC_TIMESTAMP() - INTERVAL 2 MINUTE, 1, 'Global', 'BrandNewGuy', 'hello, first time here'),
-  (UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 1, 'Global', 'Server', 'Welcome to the Sample Conquest Server!'),
-  (UTC_TIMESTAMP() - INTERVAL 1 DAY, 1, 'Global', 'Server', 'Next map: Grand Bazaar'),
-  (UTC_TIMESTAMP() - INTERVAL 2 DAY, 2, 'Global', 'Server', 'Welcome to the Sample Close Quarters Server!'),
-  (UTC_TIMESTAMP() - INTERVAL 5 HOUR, 1, 'Global', 'Müller', 'Grüße aus München'),
-  (UTC_TIMESTAMP() - INTERVAL 40 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOL'),
-  (UTC_TIMESTAMP() - INTERVAL 39 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOOOOOL');
+SELECT logDate, ServerID, logSubset, logSoldierName, logMessage
+FROM (
+  SELECT
+    UTC_TIMESTAMP() - INTERVAL (n * 53 + 7) MINUTE AS logDate,
+    1 + n MOD 2 AS ServerID,
+    ELT(1 + n MOD 5, 'Global', 'Global', 'Team', 'Squad', 'Global') AS logSubset,
+    (SELECT SoldierName FROM tbl_playerdata WHERE PlayerID = 101 + (n * 7) MOD 240) AS logSoldierName,
+    ELT(1 + n MOD 16, 'gg', 'nice shot', 'ak 47 is too strong', 'top 10 this week!',
+        'who is on the tank?', 'push the flag', 'medic!', 'anyone has ammo?',
+        'thanks for the revive', 'lag?', 'gg wp', 'nice round', 'rush B',
+        'that sniper on the hill...', 'need a pilot', 'ready up') AS logMessage
+  FROM sample_numbers
+  WHERE n < 240
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 2 MINUTE, 1, 'Global', 'BrandNewGuy', 'hello, first time here'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 1, 'Global', 'Server', 'Welcome to the Sample Conquest Server!'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 1 DAY, 1, 'Global', 'Server', 'Next map: Grand Bazaar'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 2 DAY, 2, 'Global', 'Server', 'Welcome to the Sample Close Quarters Server!'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 5 HOUR, 1, 'Global', 'Müller', 'Grüße aus München'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 40 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOL'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 39 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOOOOOL'
+) chat
+ORDER BY logDate;
 
 DROP TABLE sample_numbers;

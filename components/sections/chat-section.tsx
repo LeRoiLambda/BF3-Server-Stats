@@ -1,193 +1,133 @@
-import Link from "next/link";
-import { ChatAutoRefresh } from "@/components/chat/chat-auto-refresh";
-import { ChatSearchForm } from "@/components/chat/chat-search-form";
+import { ChatFilters } from "@/components/chat/chat-filters";
+import { chatQuery } from "@/components/chat/chat-href";
+import { toChatMessageView } from "@/components/chat/chat-message-view";
+import { ChatTranscript, type ChatTranscriptAnchor } from "@/components/chat/chat-transcript";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
-import { DateTime } from "@/components/stats/date-time";
-import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
-import { StatsPager } from "@/components/stats/pager";
+import { ui } from "@/components/layout/stats-ui";
+import { getChatLog } from "@/src/server/repositories/chat-repository";
 import {
-  PlayerIdentity,
-  PlayerTableCellLink,
-  playerTableRowClass
-} from "@/components/stats/player-link";
-import { SubsetBadge } from "@/components/stats/subset-badge";
-import {
-  getServerChatLog,
-  parseChatOrder,
-  parseChatPage,
-  parseChatSort,
-  type ChatSort
-} from "@/src/server/repositories/chat-repository";
+  CHAT_PAGE_SIZE,
+  chatFilterQuery,
+  readChatParams,
+  type ChatParams,
+  type ChatPosition
+} from "@/src/server/routing/chat-params";
 import { firstValue } from "@/src/server/routing/params";
 import {
-  nextOrder,
   scopeHref,
   scopeName,
   scopeServerId,
-  scopeServers,
   type PageScope,
   type SearchParams
 } from "@/src/server/routing/server-pages";
+import { formatSiteTime, siteTimeZone } from "@/src/server/utils/site-time";
 
 type ChatSectionProps = {
   scope: PageScope;
   searchParams: SearchParams;
 };
 
-const SORT_LABELS: Record<ChatSort, string> = {
-  date: "Date",
-  soldierName: "Player",
-  message: "Message"
-};
+// Opening the page at another position shows a new transcript.
+function positionKey(position: ChatPosition): string {
+  switch (position.kind) {
+    case "latest":
+      return position.kind;
+    case "at":
+      return `at:${position.instant.toISOString()}`;
+    default:
+      return `${position.kind}:${position.messageId}`;
+  }
+}
+
+function emptyLabel(params: ChatParams, filtered: boolean): string {
+  const matching = filtered ? "matching " : "";
+
+  switch (params.position.kind) {
+    case "before":
+      return `No earlier ${matching}messages.`;
+    case "after":
+      return `No newer ${matching}messages yet.`;
+    default:
+      return filtered ? "No messages match these filters." : "No chat messages yet.";
+  }
+}
+
+function transcriptAnchor(
+  params: ChatParams,
+  anchorId: number | null
+): ChatTranscriptAnchor | null {
+  switch (params.position.kind) {
+    case "around":
+      return { kind: "message", messageId: params.position.messageId };
+    case "at":
+      return {
+        kind: "time",
+        messageId: anchorId,
+        label: formatSiteTime(params.position.instant)
+      };
+    default:
+      return null;
+  }
+}
 
 export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
-  const sort = parseChatSort(firstValue(searchParams.sort));
-  const order = parseChatOrder(firstValue(searchParams.order));
-  const page = parseChatPage(firstValue(searchParams.page));
-  const query = firstValue(searchParams.q)?.trim() || null;
+  const params = readChatParams((name) => firstValue(searchParams[name]));
   const serverId = scopeServerId(scope);
-  const showServer = scope.kind === "all";
-  const result = await getServerChatLog({
-    ...scopeServers(scope),
+  const log = await getChatLog({
+    serverIds: scope.kind === "all" ? scope.serverIds : [scope.server.serverId],
     gameId: scope.gameId,
-    sort,
-    order,
-    page,
-    pageSize: 20,
-    query
+    terms: params.terms,
+    playerId: params.playerId,
+    channel: params.channel,
+    position: params.position,
+    size: CHAT_PAGE_SIZE
   });
-
-  function sortHeading(sortKey: ChatSort) {
-    return (
-      <Link
-        href={scopeHref(scope, "chat", {
-          sort: sortKey,
-          order: nextOrder(sort, sortKey, order, sortKey === "date" ? "desc" : "asc"),
-          q: query
-        })}
-        className={sortableHeadingClass(sort === sortKey)}
-      >
-        {SORT_LABELS[sortKey]}
-        {sort === sortKey ? (order === "asc" ? "↑" : "↓") : null}
-      </Link>
-    );
-  }
+  const viewScope = { showServer: scope.kind === "all", serverId };
+  const filtered = params.terms.length > 0 || params.playerId !== null || params.channel !== null;
+  const filterValues = chatFilterQuery(params);
+  const filterQuery = chatQuery(filterValues);
+  const pagePath = scopeHref(scope, "chat");
 
   return (
     <StatsShell
       title={`${scopeName(scope)} - Chat`}
       subtitle={
         scope.kind === "all"
-          ? "Browse recent chat messages and search by player or keyword across all servers."
-          : "Browse recent chat messages and search by player or keyword."
+          ? "The chat of every server as it happens. Search it, follow one player or channel, or jump to any moment."
+          : "The server's chat as it happens. Search it, follow one player or channel, or jump to any moment."
       }
       servers={scope.context.servers}
       currentServerId={serverId}
       activeSection="chat"
     >
       <section className={ui.panel}>
-        <ChatAutoRefresh intervalMs={60000} />
-        <ChatSearchForm
-          basePath={scopeHref(scope, "chat")}
-          clearHref={scopeHref(scope, "chat")}
-          defaultValue={query ?? ""}
-          sort={sort}
-          order={order}
-          serverId={serverId}
+        <ChatFilters
+          params={params}
+          player={log.player}
+          pagePath={pagePath}
+          filterValues={filterValues}
+          filterQuery={filterQuery}
         />
-
-        {result.dateRange ? (
-          <p className="mb-3 text-xs text-slate-300">
-            Date range: <DateTime value={result.dateRange.low} /> -{" "}
-            <DateTime value={result.dateRange.high} />
-          </p>
-        ) : null}
-
-        <div className={ui.tableShell}>
-          <table className={ui.table}>
-            <thead className={ui.tableHead}>
-              <tr>
-                <th className={ui.th}>#</th>
-                <th className={ui.th}>{sortHeading("date")}</th>
-                <th className={ui.th}>{sortHeading("soldierName")}</th>
-                {showServer ? <th className={ui.th}>Server</th> : null}
-                <th className={ui.th}>Subset</th>
-                <th className={ui.th}>{sortHeading("message")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.entries.length === 0 ? (
-                <tr className={ui.tableRow}>
-                  <td className={ui.emptyCell} colSpan={showServer ? 6 : 5}>
-                    No chat entries found.
-                  </td>
-                </tr>
-              ) : (
-                result.entries.map((entry, index) => (
-                  <tr
-                    key={entry.id}
-                    className={playerTableRowClass(ui.tableRow, entry.playerId !== null)}
-                  >
-                    <td className={ui.td}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        {(result.page - 1) * result.pageSize + index + 1}
-                      </PlayerTableCellLink>
-                    </td>
-                    <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        <DateTime value={entry.logDate} />
-                      </PlayerTableCellLink>
-                    </td>
-                    <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerTableCellLink
-                        playerId={entry.playerId}
-                        serverId={serverId}
-                        primary
-                      >
-                        <PlayerIdentity
-                          soldierName={entry.soldierName}
-                          countryCode={entry.countryCode}
-                        />
-                        <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
-                      </PlayerTableCellLink>
-                    </td>
-                    {showServer ? (
-                      <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                        <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                          {entry.serverName ?? `Server #${entry.serverId}`}
-                        </PlayerTableCellLink>
-                      </td>
-                    ) : null}
-                    <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        <SubsetBadge subset={entry.subset} />
-                      </PlayerTableCellLink>
-                    </td>
-                    <td className={`${ui.td} text-slate-300`}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        {entry.message}
-                      </PlayerTableCellLink>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <StatsPager
-          page={result.page}
-          totalPages={result.totalPages}
-          hasNextPage={result.hasNextPage}
-          getPageHref={(targetPage) =>
-            scopeHref(scope, "chat", {
-              sort,
-              order,
-              q: query,
-              page: targetPage > 1 ? targetPage : null
-            })
-          }
+        <ChatTranscript
+          key={`${filterQuery}|${positionKey(params.position)}`}
+          initial={{
+            messages: log.messages.map((message) => toChatMessageView(message, viewScope)),
+            hasOlder: log.hasOlder,
+            hasNewer: log.hasNewer,
+            latestLoggedId: log.latestLoggedId
+          }}
+          anchor={transcriptAnchor(params, log.anchorId)}
+          positioned={params.position.kind !== "latest"}
+          terms={params.terms}
+          pagePath={pagePath}
+          filterQuery={filterQuery}
+          apiQuery={chatQuery({
+            ...filterValues,
+            sid: serverId === null ? null : String(serverId)
+          })}
+          timeZone={siteTimeZone()}
+          filtered={filtered}
+          emptyLabel={emptyLabel(params, filtered)}
         />
       </section>
     </StatsShell>
