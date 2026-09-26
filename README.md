@@ -282,8 +282,11 @@ npm run start
 
 `npm run start` loads the same `.env` files as `next start`
 (`.env.production.local`, `.env.local`, `.env.production` and `.env`), then
-starts `.next/standalone/server.js`. The server listens on `PORT` (default
-`3000`) and `HOSTNAME` (default `0.0.0.0`).
+starts `.next/standalone/server.js` on every IPv4 interface, on `PORT` (default
+`3000`). It takes `next start`'s `-H`, `-p` and `--keepAliveTimeout` options:
+`npm run start -- -H 127.0.0.1 -p 8080` picks the address and port, and `-H ::`
+listens on IPv6 too. Started on its own, as in Docker or on Passenger,
+`server.js` reads `PORT` and `HOSTNAME` (default `0.0.0.0`) instead.
 
 ### Docker
 
