@@ -105,6 +105,12 @@ including lines written before it changed. The site converts every time and show
 `BF3_STATS_TIME_ZONE`, followed by the zone's abbreviation, such as `PDT`, or
 its UTC offset, such as `GMT+2`.
 
+With AdKats' "Feed Stat Logger Settings" on, AdKats sets the logger's
+"Servertime Offset" every hour so that the logger writes UTC, whatever the
+Procon host's zone and its daylight saving time: set
+`BF3_STATS_LOGGER_TIME_ZONE=UTC` and `BF3_STATS_LOGGER_TIME_OFFSET=0`. Copying
+the offset AdKats set would be right until the host's clock next changes.
+
 ## Available Scripts
 
 ```sh
@@ -330,7 +336,8 @@ docker build --platform linux/amd64 --target bundle --output dist .
 - If chat, round or first and last seen times, the weekly leaderboard or the
   chat's "jump to" field are off by some hours, check
   `BF3_STATS_LOGGER_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_OFFSET` against the
-  Procon host and the logger's settings.
+  Procon host and the logger's settings, or against AdKats' "Feed Stat Logger
+  Settings", which makes the logger write UTC.
 - If weekly leaderboards, dogtags, bans, or moderation sections are unavailable,
   check whether the optional tables exist in the database.
 - If images are missing, verify that the referenced files exist under
