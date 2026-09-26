@@ -14,14 +14,12 @@ import {
 import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
 import { WeeklyUnrankedServersNote } from "@/components/stats/weekly-leaderboard-section";
 import {
-  getAllServersLeaderboard,
-  getServerLeaderboard,
+  getLeaderboard,
   getWeeklyLeaderboard,
   parseLeaderboardPage,
   parseLeaderSort,
   parseSortOrder,
-  type LeaderSort,
-  type SortOrder
+  type LeaderSort
 } from "@/src/server/repositories/player-stats-repository";
 import { firstValue } from "@/src/server/routing/params";
 import {
@@ -46,23 +44,8 @@ const SORT_LABELS: Record<LeaderSort, string> = {
   hsr: "HSR"
 };
 
-function loadLeaderboard(
-  scope: PageScope,
-  query: { sort: LeaderSort; order: SortOrder; page: number; search: string | null }
-) {
-  const input = { ...query, gameId: scope.gameId, pageSize: 20 };
-
-  return scope.kind === "all"
-    ? getAllServersLeaderboard({ ...input, serverIds: scope.serverIds })
-    : getServerLeaderboard({ ...input, serverId: scope.server.serverId });
-}
-
-function loadWeeklyLeaderboard(scope: PageScope) {
-  return getWeeklyLeaderboard({
-    serverIds: scope.kind === "all" ? scope.serverIds : [scope.server.serverId],
-    gameId: scope.gameId,
-    limit: 20
-  });
+function scopeServerIds(scope: PageScope): number[] {
+  return scope.kind === "all" ? scope.serverIds : [scope.server.serverId];
 }
 
 export async function LeadersSection({ scope, searchParams }: LeadersSectionProps) {
@@ -73,11 +56,14 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
   const search = firstValue(searchParams.q)?.trim() || null;
   const serverId = scopeServerId(scope);
 
+  const serverIds = scopeServerIds(scope);
   const [result, weeklyResult] = await Promise.all([
     view === "overall"
-      ? loadLeaderboard(scope, { sort, order, page, search })
+      ? getLeaderboard({ serverIds, gameId: scope.gameId, sort, order, page, pageSize: 20, search })
       : Promise.resolve(null),
-    view === "weekly" ? loadWeeklyLeaderboard(scope) : Promise.resolve(null)
+    view === "weekly"
+      ? getWeeklyLeaderboard({ serverIds, gameId: scope.gameId, limit: 20 })
+      : Promise.resolve(null)
   ]);
 
   return (

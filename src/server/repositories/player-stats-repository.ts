@@ -20,16 +20,6 @@ export type CurrentPlayerSort = "soldierName" | "score" | "kills" | "deaths" | "
 export type CurrentPlayerOrder = "asc" | "desc";
 
 export type LeaderboardQueryInput = {
-  serverId: number;
-  gameId: number;
-  sort: LeaderSort;
-  order: SortOrder;
-  page: number;
-  pageSize: number;
-  search: string | null;
-};
-
-export type AllServersLeaderboardQueryInput = {
   serverIds: number[];
   gameId: number;
   sort: LeaderSort;
@@ -105,22 +95,6 @@ export type CurrentPlayer = {
   squadId: number;
   countryCode: string | null;
   banStatus: "active" | "expired" | null;
-};
-
-const SORT_SQL: Record<LeaderSort, string> = {
-  soldierName: "tpd.SoldierName",
-  score: "COALESCE(tps.Score, 0)",
-  kills: "COALESCE(tps.Kills, 0)",
-  kdr: `COALESCE(${perAtLeastOneSql("tps.Kills", "tps.Deaths")}, 0)`,
-  hsr: "COALESCE(((tps.Headshots / NULLIF(tps.Kills, 0)) * 100), 0)"
-};
-
-const ALL_SERVERS_SORT_SQL: Record<LeaderSort, string> = {
-  soldierName: "tpd.SoldierName",
-  score: "COALESCE(SUM(tps.Score), 0)",
-  kills: "COALESCE(SUM(tps.Kills), 0)",
-  kdr: `COALESCE(${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")}, 0)`,
-  hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)"
 };
 
 const CURRENT_PLAYER_SORT_SQL: Record<CurrentPlayerSort, string> = {
@@ -242,12 +216,31 @@ export function parseCurrentPlayerOrder(value: string | null): CurrentPlayerOrde
   return normalizeCurrentPlayerOrder(value);
 }
 
-function leaderboardOrderBy(
-  sort: LeaderSort,
-  order: SortOrder,
-  aggregate: boolean
-): string {
-  const sortSql = aggregate ? ALL_SERVERS_SORT_SQL[sort] : SORT_SQL[sort];
+// A tbl_playerstats column: summed across a player's servers, or as stored
+// when the board shows one server, where each player has a single row.
+type StatSql = (column: string) => string;
+
+function leaderboardStatSql(aggregate: boolean): StatSql {
+  return aggregate ? (column) => `SUM(tps.${column})` : (column) => `tps.${column}`;
+}
+
+function leaderboardSortSql(sort: LeaderSort, stat: StatSql): string {
+  switch (sort) {
+    case "soldierName":
+      return "tpd.SoldierName";
+    case "score":
+      return `COALESCE(${stat("Score")}, 0)`;
+    case "kills":
+      return `COALESCE(${stat("Kills")}, 0)`;
+    case "kdr":
+      return `COALESCE(${perAtLeastOneSql(stat("Kills"), stat("Deaths"))}, 0)`;
+    case "hsr":
+      return `COALESCE(((${stat("Headshots")} / NULLIF(${stat("Kills")}, 0)) * 100), 0)`;
+  }
+}
+
+function leaderboardOrderBy(sort: LeaderSort, order: SortOrder, stat: StatSql): string {
+  const sortSql = leaderboardSortSql(sort, stat);
   const orderSql = order.toUpperCase();
 
   if (sort === "soldierName") {
@@ -275,103 +268,21 @@ function toLeaderboardPlayer(row: PlayerRow): LeaderboardPlayer {
   };
 }
 
-export async function getServerLeaderboard(
-  input: LeaderboardQueryInput
-): Promise<LeaderboardResult> {
-  const pool = getDbPool();
-  const sort = normalizeSort(input.sort);
-  const order = normalizeOrder(input.order);
-  const requestedPage = normalizePage(input.page);
-  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
-  const search = input.search?.trim() ? input.search.trim() : null;
-
-  const countParams: Array<string | number> = [
-    input.serverId,
-    input.gameId
-  ];
-  let countSql = `
-    SELECT COUNT(*) AS totalRows
-    FROM tbl_playerstats tps
-    INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-    INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    WHERE tsp.ServerID = ?
-      AND tpd.GameID = ?
-  `;
-
-  if (search) {
-    countSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    countParams.push(containsPattern(search));
-  }
-
-  const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
-  const totalRows = Number(countRows[0]?.totalRows ?? 0);
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const page = Math.min(requestedPage, totalPages);
-  const offset = (page - 1) * pageSize;
-  const adkatsAvailable = await hasAdkatsBansTable();
-  const leaderParams: Array<string | number | null> = [
-    input.serverId,
-    input.gameId
-  ];
-  let leaderSql = `
-    SELECT
-      tpd.PlayerID AS playerId,
-      tpd.SoldierName AS soldierName,
-      tpd.CountryCode AS countryCode,
-      tps.Score AS score,
-      tps.Kills AS kills,
-      ${perAtLeastOneSql("tps.Kills", "tps.Deaths")} AS kdr,
-      ((tps.Headshots / NULLIF(tps.Kills, 0)) * 100) AS hsr
-      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-    FROM tbl_playerstats tps
-    INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-    INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-    WHERE tsp.ServerID = ?
-      AND tpd.GameID = ?
-  `;
-
-  if (search) {
-    leaderSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    leaderParams.push(containsPattern(search));
-  }
-
-  leaderSql += `
-    ORDER BY ${leaderboardOrderBy(sort, order, false)}
-    LIMIT ? OFFSET ?
-  `;
-  leaderParams.push(pageSize, offset);
-
-  const [rows] = await pool.query<PlayerRow[]>(leaderSql, leaderParams);
-
-  return {
-    players: rows.map(toLeaderboardPlayer),
-    totalRows,
-    totalPages,
-    page,
-    pageSize,
-    hasNextPage: page < totalPages
-  };
-}
-
-export async function getAllServersLeaderboard(
-  input: AllServersLeaderboardQueryInput
-): Promise<LeaderboardResult> {
+// The overall leaderboard of the given servers. A player's stats on several
+// servers are summed; one server reads them without grouping, which costs
+// less on large servers.
+export async function getLeaderboard(input: LeaderboardQueryInput): Promise<LeaderboardResult> {
   const serverIds = Array.from(
-    new Set(
-      input.serverIds
-        .map((serverId) => Number(serverId))
-        .filter((serverId) => Number.isFinite(serverId) && serverId > 0)
-    )
+    new Set(input.serverIds.filter((serverId) => Number.isInteger(serverId) && serverId > 0))
   );
-
+  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   if (serverIds.length === 0) {
     return {
       players: [],
       totalRows: 0,
       totalPages: 1,
       page: 1,
-      pageSize: Math.max(1, Math.min(100, Math.floor(input.pageSize))),
+      pageSize,
       hasNextPage: false
     };
   }
@@ -380,71 +291,65 @@ export async function getAllServersLeaderboard(
   const sort = normalizeSort(input.sort);
   const order = normalizeOrder(input.order);
   const requestedPage = normalizePage(input.page);
-  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   const search = input.search?.trim() ? input.search.trim() : null;
-  const serverPlaceholders = serverIds.map(() => "?").join(", ");
-
-  const countParams: Array<string | number> = [...serverIds, input.gameId];
-  let countSql = `
-    SELECT COUNT(DISTINCT tpd.PlayerID) AS totalRows
+  const aggregate = serverIds.length > 1;
+  const stat = leaderboardStatSql(aggregate);
+  const scope = buildServerScopeCondition("tsp.ServerID", { serverIds });
+  const fromSql = `
     FROM tbl_playerstats tps
     INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
     INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    WHERE tsp.ServerID IN (${serverPlaceholders})
-      AND tpd.GameID = ?
   `;
+  const whereSql = `
+    WHERE ${scope.sql}
+      AND tpd.GameID = ?
+      ${search ? `AND ${searchableText("tpd.SoldierName")} LIKE ?` : ""}
+  `;
+  const whereParams: Array<string | number> = [
+    ...scope.params,
+    input.gameId,
+    ...(search ? [containsPattern(search)] : [])
+  ];
 
-  if (search) {
-    countSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    countParams.push(containsPattern(search));
-  }
-
-  const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
+  const [countRows] = await pool.query<CountRow[]>(
+    `
+      SELECT ${aggregate ? "COUNT(DISTINCT tpd.PlayerID)" : "COUNT(*)"} AS totalRows
+      ${fromSql}
+      ${whereSql}
+    `,
+    whereParams
+  );
   const totalRows = Number(countRows[0]?.totalRows ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const page = Math.min(requestedPage, totalPages);
-  const offset = (page - 1) * pageSize;
-
   const adkatsAvailable = await hasAdkatsBansTable();
-  const leaderParams: Array<string | number | null> = [
-    ...serverIds,
-    input.gameId
-  ];
 
-  let leaderSql = `
-    SELECT
-      tpd.PlayerID AS playerId,
-      tpd.SoldierName AS soldierName,
-      tpd.CountryCode AS countryCode,
-      SUM(tps.Score) AS score,
-      SUM(tps.Kills) AS kills,
-      ${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")} AS kdr,
-      ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr
-      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-    FROM tbl_playerstats tps
-    INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-    INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-    WHERE tsp.ServerID IN (${serverPlaceholders})
-      AND tpd.GameID = ?
-  `;
-
-  if (search) {
-    leaderSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    leaderParams.push(containsPattern(search));
-  }
-
-  leaderSql += `
-    GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
-  `;
-
-  leaderSql += `
-    ORDER BY ${leaderboardOrderBy(sort, order, true)}
-    LIMIT ? OFFSET ?
-  `;
-  leaderParams.push(pageSize, offset);
-
-  const [rows] = await pool.query<PlayerRow[]>(leaderSql, leaderParams);
+  const [rows] = await pool.query<PlayerRow[]>(
+    `
+      SELECT
+        tpd.PlayerID AS playerId,
+        tpd.SoldierName AS soldierName,
+        tpd.CountryCode AS countryCode,
+        ${stat("Score")} AS score,
+        ${stat("Kills")} AS kills,
+        ${perAtLeastOneSql(stat("Kills"), stat("Deaths"))} AS kdr,
+        ((${stat("Headshots")} / NULLIF(${stat("Kills")}, 0)) * 100) AS hsr
+        ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
+      ${fromSql}
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
+      ${whereSql}
+      ${
+        aggregate
+          ? `GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode${
+              adkatsAvailable ? ", adk.ban_status" : ""
+            }`
+          : ""
+      }
+      ORDER BY ${leaderboardOrderBy(sort, order, stat)}
+      LIMIT ? OFFSET ?
+    `,
+    [...whereParams, pageSize, (page - 1) * pageSize]
+  );
 
   return {
     players: rows.map(toLeaderboardPlayer),
