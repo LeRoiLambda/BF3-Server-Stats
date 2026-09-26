@@ -63,6 +63,9 @@ export async function listServerCountryBreakdown(
 ): Promise<CountryBreakdown[]> {
   const pool = getDbPool();
   const scope = buildServerScopeCondition("tsp.ServerID", input);
+  // Only region codes, which normalizeCountryCode() accepts, get a tab: the
+  // logger's "--" for unknown and GeoIP pseudo-codes such as "A1" (anonymous
+  // proxy) name no country.
   const [rows] = await pool.query<CountryBreakdownRow[]>(
     `
       SELECT
@@ -73,8 +76,7 @@ export async function listServerCountryBreakdown(
       INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
       WHERE ${scope.sql}
         AND tpd.GameID = ?
-        AND tpd.CountryCode != '--'
-        AND tpd.CountryCode != ''
+        AND tpd.CountryCode REGEXP '^[A-Za-z]{2}$'
       GROUP BY tpd.CountryCode
       ORDER BY playerCount DESC, tpd.CountryCode ASC
       LIMIT 20
