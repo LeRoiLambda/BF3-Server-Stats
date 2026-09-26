@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { HintProvider } from "@/components/layout/hint";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body className="relative">
-        <div className="isolate">{children}</div>
+        <HintProvider>
+          <div className="isolate">{children}</div>
+        </HintProvider>
       </body>
     </html>
   );

@@ -1,4 +1,5 @@
 import { clsx } from "clsx";
+import { Hint } from "@/components/layout/hint";
 
 export type PlayerBanStatus = "active" | "expired" | null | undefined;
 export type PlayerDisciplineKind =
@@ -8,44 +9,17 @@ export type PlayerDisciplineKind =
   | "unavailable";
 export type PlayerDisciplineDensity = "full" | "badge" | "compact";
 
-type PlayerDisciplineStatus = {
-  kind: PlayerDisciplineKind;
-  label: string;
-  compactLabel: string;
-  title: string;
-};
-
 type PlayerDisciplineBadgeProps = {
   status: PlayerBanStatus;
   density?: PlayerDisciplineDensity;
   className?: string;
 };
 
-const STATUS_BY_KIND: Record<PlayerDisciplineKind, PlayerDisciplineStatus> = {
-  none: {
-    kind: "none",
-    label: "No active ban",
-    compactLabel: "No ban",
-    title: "No active ban"
-  },
-  activeBan: {
-    kind: "activeBan",
-    label: "Active ban",
-    compactLabel: "Ban",
-    title: "Active ban"
-  },
-  expiredBan: {
-    kind: "expiredBan",
-    label: "Expired ban",
-    compactLabel: "Expired",
-    title: "Expired ban"
-  },
-  unavailable: {
-    kind: "unavailable",
-    label: "Moderation unavailable",
-    compactLabel: "Unavailable",
-    title: "Moderation unavailable"
-  }
+const LABELS: Record<PlayerDisciplineKind, { label: string; compactLabel: string }> = {
+  none: { label: "No active ban", compactLabel: "No ban" },
+  activeBan: { label: "Active ban", compactLabel: "Ban" },
+  expiredBan: { label: "Expired ban", compactLabel: "Expired" },
+  unavailable: { label: "Moderation unavailable", compactLabel: "Unavailable" }
 };
 
 export function disciplineKindFromBanStatus(
@@ -62,18 +36,11 @@ export function disciplineKindFromBanStatus(
   return "none";
 }
 
-export function getPlayerDisciplineStatus(
-  kind: PlayerDisciplineKind
-): PlayerDisciplineStatus {
-  return STATUS_BY_KIND[kind];
-}
-
 export function playerDisciplineLabel(
   kind: PlayerDisciplineKind,
   density: PlayerDisciplineDensity = "badge"
 ): string {
-  const status = getPlayerDisciplineStatus(kind);
-  return density === "compact" ? status.compactLabel : status.label;
+  return density === "compact" ? LABELS[kind].compactLabel : LABELS[kind].label;
 }
 
 export function playerDisciplineBadgeClass(
@@ -109,14 +76,14 @@ export function PlayerDisciplineBadge({
     return null;
   }
 
-  const resolved = getPlayerDisciplineStatus(kind);
+  const badgeClassName = playerDisciplineBadgeClass(kind, density, className);
+  if (density !== "compact") {
+    return <span className={badgeClassName}>{playerDisciplineLabel(kind, density)}</span>;
+  }
 
   return (
-    <span
-      className={playerDisciplineBadgeClass(kind, density, className)}
-      title={resolved.title}
-    >
+    <Hint label={playerDisciplineLabel(kind)} className={badgeClassName}>
       {playerDisciplineLabel(kind, density)}
-    </span>
+    </Hint>
   );
 }

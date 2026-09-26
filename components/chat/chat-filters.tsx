@@ -3,6 +3,7 @@ import Link from "next/link";
 import { chatHref, type ChatQueryValues } from "@/components/chat/chat-href";
 import { ChatJump } from "@/components/chat/chat-jump";
 import { ChatPlayerFilter } from "@/components/chat/chat-player-filter";
+import { Hint } from "@/components/layout/hint";
 import { SegmentedNav } from "@/components/layout/segmented-nav";
 import { ui } from "@/components/layout/stats-ui";
 import { PlayerIdentity } from "@/components/stats/player-link";
@@ -57,8 +58,7 @@ export function ChatFilters({
             type="search"
             name="q"
             defaultValue={params.text}
-            placeholder="Search messages..."
-            title='Every word must appear; put "a phrase" in quotes.'
+            placeholder='Search words or "a phrase"...'
             aria-label="Search messages"
             autoComplete="off"
             className={ui.input}
@@ -81,14 +81,18 @@ export function ChatFilters({
               ) : (
                 <span className="min-w-0 flex-1 truncate text-slate-400">Unknown player</span>
               )}
-              <Link
-                href={chatHref(pagePath, filterQuery, { player: null })}
-                aria-label="Show messages from every player"
-                title="Show messages from every player"
-                className="rounded-sm px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+              <Hint
+                label="Show messages from every player"
+                render={
+                  <Link
+                    href={chatHref(pagePath, filterQuery, { player: null })}
+                    aria-label="Show messages from every player"
+                    className="rounded-sm px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  />
+                }
               >
                 ✕
-              </Link>
+              </Hint>
             </div>
           ) : (
             <ChatPlayerFilter pagePath={pagePath} filterQuery={filterQuery} />

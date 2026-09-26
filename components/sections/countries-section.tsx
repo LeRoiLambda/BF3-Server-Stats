@@ -99,7 +99,7 @@ export async function CountriesSection({ scope, searchParams }: CountriesSection
                 <p>
                   <span className="text-slate-400">Country:</span>{" "}
                   <span className="inline-flex items-center gap-2">
-                    <CountryFlag countryCode={snapshot.selectedCountryCode} />
+                    <CountryFlag countryCode={snapshot.selectedCountryCode} decorative />
                     {formatCountryName(snapshot.selectedCountryCode)}
                   </span>
                 </p>

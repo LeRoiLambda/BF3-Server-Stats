@@ -2,6 +2,7 @@ import Image from "next/image";
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { ui } from "@/components/layout/stats-ui";
+import { CountryFlag } from "@/components/stats/country-flag";
 import { DateTime } from "@/components/stats/date-time";
 import {
   playerDisciplineBadgeClass,
@@ -13,11 +14,7 @@ import {
   weeklyLeaderboardPodiumLabel,
   type WeeklyLeaderboardPodiumRank
 } from "@/components/stats/weekly-leaderboard-rank";
-import {
-  countryFlagImagePath,
-  formatCountryName,
-  rankImagePath
-} from "@/src/server/domain/bf3-reference";
+import { formatCountryName, rankImagePath } from "@/src/server/domain/bf3-reference";
 import type { PlayerProfile } from "@/src/server/repositories/player-profile-repository";
 import type {
   ModerationStatus,
@@ -314,14 +311,7 @@ export function PlayerProfileHeader({
 
           <div className="relative mt-5 flex flex-wrap items-center gap-2 border-t border-slate-700/50 pt-4">
             <span className={`${profileChipClass} gap-2`}>
-              <Image
-                src={countryFlagImagePath(profile.countryCode)}
-                alt={formatCountryName(profile.countryCode)}
-                title={formatCountryName(profile.countryCode)}
-                width={18}
-                height={12}
-                className="h-3 w-[18px] rounded-[2px] border border-slate-700/80 object-cover"
-              />
+              <CountryFlag countryCode={profile.countryCode} decorative />
               {formatCountryName(profile.countryCode)}
             </span>
             <span className={profileChipClass}>
@@ -404,14 +394,7 @@ export function PlayerProfileHeader({
             </h2>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className={`${profileChipClass} gap-2`}>
-                <Image
-                  src={countryFlagImagePath(profile.countryCode)}
-                  alt={formatCountryName(profile.countryCode)}
-                  title={formatCountryName(profile.countryCode)}
-                  width={18}
-                  height={12}
-                  className="h-3 w-[18px] rounded-[2px] border border-slate-700/80 object-cover"
-                />
+                <CountryFlag countryCode={profile.countryCode} decorative />
                 {formatCountryName(profile.countryCode)}
               </span>
               <span className={profileChipClass}>

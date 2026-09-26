@@ -2,7 +2,6 @@ import { clsx } from "clsx";
 
 type WeeklyLeaderboardRankProps = Readonly<{
   rank: number;
-  showLabel?: boolean;
 }>;
 
 export type WeeklyLeaderboardPodiumRank = 1 | 2 | 3;
@@ -113,10 +112,7 @@ export function WeeklyLeaderboardMedal({
   );
 }
 
-export function WeeklyLeaderboardRank({
-  rank,
-  showLabel = true
-}: WeeklyLeaderboardRankProps) {
+export function WeeklyLeaderboardRank({ rank }: WeeklyLeaderboardRankProps) {
   const podiumRank = toWeeklyLeaderboardPodiumRank(rank);
 
   if (podiumRank === null) {
@@ -135,16 +131,13 @@ export function WeeklyLeaderboardRank({
   return (
     <span
       className={clsx(
-        showLabel
-          ? "inline-flex h-7 min-w-11 items-center justify-center gap-1 rounded-sm border px-1.5 text-xs font-bold"
-          : "inline-flex h-7 w-7 items-center justify-center",
-        showLabel ? podium.badgeClassName : undefined
+        "inline-flex h-7 min-w-11 items-center justify-center gap-1 rounded-sm border px-1.5 text-xs font-bold",
+        podium.badgeClassName
       )}
       aria-label={`${podium.label} weekly rank ${rank}`}
-      title={`${podium.label} weekly rank`}
     >
-      <WeeklyLeaderboardMedal rank={podiumRank} className={showLabel ? "h-5 w-4" : "h-7 w-6"} />
-      {showLabel ? <span>#{rank}</span> : null}
+      <WeeklyLeaderboardMedal rank={podiumRank} className="h-5 w-4" />
+      <span>#{rank}</span>
     </span>
   );
 }
