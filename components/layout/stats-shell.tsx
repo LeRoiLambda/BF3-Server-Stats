@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { navButtonClass, ui } from "@/components/layout/stats-ui";
-import { ServerScopeSelect } from "@/components/layout/server-scope-select";
+import { ServerScopeMenu } from "@/components/layout/server-scope-menu";
 import { PlayerProfileSearchForm } from "@/components/search/player-profile-search-form";
 import {
   SERVER_NAV_SECTIONS,
@@ -105,10 +105,10 @@ export function StatsShell({
             {battlelogHref || hasScopeSelect || titleAction ? (
               <div className="flex w-full shrink-0 flex-nowrap items-center justify-end gap-2 sm:w-auto">
                 {hasScopeSelect ? (
-                  <ServerScopeSelect
+                  <ServerScopeMenu
                     value={effectiveScopeValue}
                     options={effectiveScopeOptions}
-                    className={`${ui.input} h-9 min-w-0 w-56 max-w-full`}
+                    className="w-56 min-w-0 max-w-full"
                   />
                 ) : null}
                 {titleAction}
