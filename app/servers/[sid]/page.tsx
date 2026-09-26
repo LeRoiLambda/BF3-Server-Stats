@@ -1,6 +1,7 @@
 import { RouteAutoRefresh } from "@/components/stats/route-auto-refresh";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { SortHeading } from "@/components/layout/sort-heading";
+import { ui } from "@/components/layout/stats-ui";
 import { MapRotationCarousel } from "@/components/stats/map-rotation-carousel";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import {
@@ -16,13 +17,13 @@ import {
   parseCurrentPlayerOrder,
   parseCurrentPlayerSort,
   type CurrentPlayer,
-  type CurrentPlayerOrder,
   type CurrentPlayerSort
 } from "@/src/server/repositories/player-stats-repository";
 import { listTeamScores } from "@/src/server/repositories/server-overview-repository";
 import { firstValue } from "@/src/server/routing/params";
 import {
   getServerPageScope,
+  nextOrder,
   serverSectionHref,
   type ServerPageProps
 } from "@/src/server/routing/server-pages";
@@ -41,18 +42,6 @@ const SQUAD_DEATHMATCH_TEAM_NAMES: Record<number, string> = {
   3: "Charlie",
   4: "Delta"
 };
-
-function nextCurrentPlayerOrder(
-  currentSort: CurrentPlayerSort,
-  sort: CurrentPlayerSort,
-  order: CurrentPlayerOrder
-): CurrentPlayerOrder {
-  if (currentSort !== sort) {
-    return sort === "soldierName" || sort === "squad" ? "asc" : "desc";
-  }
-
-  return order === "asc" ? "desc" : "asc";
-}
 
 function liveTeamName(teamId: number, gameMode: string | null): string {
   if (teamId === 0) {
@@ -182,33 +171,25 @@ export default async function ServerHomePage({ params, searchParams }: ServerPag
                           <tr>
                             <th className={ui.th}>#</th>
                             {(Object.keys(SCOREBOARD_SORT_LABELS) as CurrentPlayerSort[]).map(
-                              (sortKey) => {
-                                const href = serverSectionHref(server.serverId, "home", {
-                                  scoreboardSort: sortKey,
-                                  scoreboardOrder: nextCurrentPlayerOrder(
-                                    scoreboardSort,
-                                    sortKey,
-                                    scoreboardOrder
-                                  )
-                                });
-                                const isActive = scoreboardSort === sortKey;
-
-                                return (
-                                  <th key={sortKey} className={ui.th}>
-                                    <a
-                                      href={href}
-                                      className={sortableHeadingClass(isActive)}
-                                    >
-                                      {SCOREBOARD_SORT_LABELS[sortKey]}
-                                      {isActive
-                                        ? scoreboardOrder === "asc"
-                                          ? "↑"
-                                          : "↓"
-                                        : null}
-                                    </a>
-                                  </th>
-                                );
-                              }
+                              (sortKey) => (
+                                <th key={sortKey} className={ui.th}>
+                                  <SortHeading
+                                    href={serverSectionHref(server.serverId, "home", {
+                                      scoreboardSort: sortKey,
+                                      scoreboardOrder: nextOrder(
+                                        scoreboardSort,
+                                        sortKey,
+                                        scoreboardOrder,
+                                        sortKey === "soldierName" || sortKey === "squad"
+                                          ? "asc"
+                                          : "desc"
+                                      )
+                                    })}
+                                    label={SCOREBOARD_SORT_LABELS[sortKey]}
+                                    activeOrder={scoreboardSort === sortKey ? scoreboardOrder : null}
+                                  />
+                                </th>
+                              )
                             )}
                           </tr>
                         </thead>

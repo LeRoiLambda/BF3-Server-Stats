@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { SortHeading } from "@/components/layout/sort-heading";
+import { ui } from "@/components/layout/stats-ui";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
 import {
@@ -66,29 +66,23 @@ export async function SuspiciousSection({ scope, searchParams }: SuspiciousSecti
             <thead className={ui.tableHead}>
               <tr>
                 <th className={ui.th}>#</th>
-                {(Object.keys(SORT_LABELS) as SuspiciousSort[]).map((sortKey) => {
-                  const isActive = sort === sortKey;
-
-                  return (
-                    <th key={sortKey} className={ui.th}>
-                      <Link
-                        href={scopeHref(scope, "suspicious", {
-                          sort: sortKey,
-                          order: nextOrder(
-                            sort,
-                            sortKey,
-                            order,
-                            sortKey === "soldierName" ? "asc" : "desc"
-                          )
-                        })}
-                        className={sortableHeadingClass(isActive)}
-                      >
-                        {SORT_LABELS[sortKey]}
-                        {isActive ? (order === "asc" ? "↑" : "↓") : null}
-                      </Link>
-                    </th>
-                  );
-                })}
+                {(Object.keys(SORT_LABELS) as SuspiciousSort[]).map((sortKey) => (
+                  <th key={sortKey} className={ui.th}>
+                    <SortHeading
+                      href={scopeHref(scope, "suspicious", {
+                        sort: sortKey,
+                        order: nextOrder(
+                          sort,
+                          sortKey,
+                          order,
+                          sortKey === "soldierName" ? "asc" : "desc"
+                        )
+                      })}
+                      label={SORT_LABELS[sortKey]}
+                      activeOrder={sort === sortKey ? order : null}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>

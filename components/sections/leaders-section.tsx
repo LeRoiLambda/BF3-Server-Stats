@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { SegmentedNav } from "@/components/layout/segmented-nav";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { SortHeading } from "@/components/layout/sort-heading";
+import { ui } from "@/components/layout/stats-ui";
 import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete-input";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
@@ -126,35 +127,29 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
             <thead className={ui.tableHead}>
               <tr>
                 <th className={ui.th}>#</th>
-                {(Object.keys(SORT_LABELS) as LeaderSort[]).map((sortKey) => {
-                  const isActive = view === "overall" && sort === sortKey;
-
-                  return (
-                    <th key={sortKey} className={ui.th}>
-                      {view === "overall" ? (
-                        <Link
-                          href={scopeHref(scope, "leaders", {
-                            view: "overall",
-                            sort: sortKey,
-                            order: nextOrder(
-                              sort,
-                              sortKey,
-                              order,
-                              sortKey === "soldierName" ? "asc" : "desc"
-                            ),
-                            q: search
-                          })}
-                          className={sortableHeadingClass(isActive)}
-                        >
-                          {SORT_LABELS[sortKey]}
-                          {isActive ? (order === "asc" ? "↑" : "↓") : null}
-                        </Link>
-                      ) : (
-                        SORT_LABELS[sortKey]
-                      )}
-                    </th>
-                  );
-                })}
+                {(Object.keys(SORT_LABELS) as LeaderSort[]).map((sortKey) => (
+                  <th key={sortKey} className={ui.th}>
+                    {view === "overall" ? (
+                      <SortHeading
+                        href={scopeHref(scope, "leaders", {
+                          view: "overall",
+                          sort: sortKey,
+                          order: nextOrder(
+                            sort,
+                            sortKey,
+                            order,
+                            sortKey === "soldierName" ? "asc" : "desc"
+                          ),
+                          q: search
+                        })}
+                        label={SORT_LABELS[sortKey]}
+                        activeOrder={sort === sortKey ? order : null}
+                      />
+                    ) : (
+                      SORT_LABELS[sortKey]
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
