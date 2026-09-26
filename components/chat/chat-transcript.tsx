@@ -1,9 +1,10 @@
 "use client";
 
+import { Tooltip } from "@base-ui/react/tooltip";
 import { clsx } from "clsx";
 import Image from "next/image";
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { highlightParts } from "@/components/chat/chat-highlight";
 import { chatHref } from "@/components/chat/chat-href";
@@ -32,6 +33,8 @@ type ChatTranscriptProps = Readonly<{
 }>;
 
 type LoadKind = "older" | "newer" | "follow" | "latest";
+
+type DetailTooltip = Tooltip.Handle<string>;
 
 const FOLLOW_INTERVAL_MS = 10_000;
 // Ids can be committed out of order.
@@ -73,18 +76,26 @@ function DaySeparator({ label }: Readonly<{ label: string }>) {
   );
 }
 
-function Speaker({ message }: Readonly<{ message: ChatMessageView }>) {
+function Speaker({
+  message,
+  tooltip
+}: Readonly<{ message: ChatMessageView; tooltip: DetailTooltip }>) {
   const name = (
     <>
       {message.flag ? (
-        <Image
-          src={message.flag.src}
-          alt={message.flag.label}
-          title={message.flag.label}
-          width={18}
-          height={12}
-          className="mr-1.5 inline-block h-3 w-[18px] rounded-[2px] border border-slate-700/80 object-cover align-[-1px]"
-        />
+        <Tooltip.Trigger
+          handle={tooltip}
+          payload={message.flag.label}
+          render={<span className="mr-1.5 inline-block align-[-1px]" />}
+        >
+          <Image
+            src={message.flag.src}
+            alt={message.flag.label}
+            width={18}
+            height={12}
+            className="h-3 w-[18px] rounded-[2px] border border-slate-700/80 object-cover"
+          />
+        </Tooltip.Trigger>
       ) : null}
       <span
         className={clsx(
@@ -121,9 +132,16 @@ type ChatMessageRowProps = Readonly<{
   terms: string[];
   anchored: boolean;
   playerFilterHref: string | null;
+  tooltip: DetailTooltip;
 }>;
 
-function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMessageRowProps) {
+const ChatMessageRow = memo(function ChatMessageRow({
+  message,
+  terms,
+  anchored,
+  playerFilterHref,
+  tooltip
+}: ChatMessageRowProps) {
   return (
     <li
       id={`message-${message.id}`}
@@ -134,18 +152,23 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
           : "hover:bg-slate-800/35"
       )}
     >
-      <Link
-        href={message.contextHref}
-        prefetch={false}
-        title={message.sentAt ? `${message.sentAt.label} · show in conversation` : "Show in conversation"}
-        className="mr-1 font-mono text-[11px] tabular-nums text-slate-500 hover:text-teal-200 sm:mr-0 sm:w-[4.25rem] sm:shrink-0"
+      <Tooltip.Trigger
+        handle={tooltip}
+        payload={message.sentAt ? `${message.sentAt.label} · Show in conversation` : "Show in conversation"}
+        render={
+          <Link
+            href={message.contextHref}
+            prefetch={false}
+            className="mr-1 font-mono text-[11px] tabular-nums text-slate-500 hover:text-teal-200 sm:mr-0 sm:w-[4.25rem] sm:shrink-0"
+          />
+        }
       >
         {message.sentAt ? (
           <time dateTime={message.sentAt.iso}>{message.sentAt.clock}</time>
         ) : (
           "--:--:--"
         )}
-      </Link>{" "}
+      </Tooltip.Trigger>{" "}
       <p className="inline break-words sm:block sm:min-w-0 sm:flex-1">
         <span
           className={clsx(
@@ -162,7 +185,7 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
             </span>{" "}
           </>
         ) : null}
-        <Speaker message={message} />{" "}
+        <Speaker message={message} tooltip={tooltip} />{" "}
         <span className={message.fromServer ? "italic text-amber-100/80" : "text-slate-200"}>
           {highlightParts(message.text, terms).map((part, index) =>
             part.match ? (
@@ -176,19 +199,24 @@ function ChatMessageRow({ message, terms, anchored, playerFilterHref }: ChatMess
         </span>
       </p>
       {playerFilterHref ? (
-        <Link
-          href={playerFilterHref}
-          prefetch={false}
-          aria-label={`Show only messages from ${message.speaker}`}
-          title={`Only messages from ${message.speaker}`}
-          className="absolute right-2 top-1.5 rounded-sm p-1 text-slate-500 opacity-0 transition-opacity hover:bg-slate-800 hover:text-slate-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70 group-hover/message:opacity-100 sm:static sm:mt-1 sm:h-fit [@media(hover:none)]:opacity-100"
+        <Tooltip.Trigger
+          handle={tooltip}
+          payload={`Only messages from ${message.speaker}`}
+          render={
+            <Link
+              href={playerFilterHref}
+              prefetch={false}
+              aria-label={`Show only messages from ${message.speaker}`}
+              className="absolute right-2 top-1.5 rounded-sm p-1 text-slate-500 opacity-0 transition-opacity hover:bg-slate-800 hover:text-slate-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-200/70 group-hover/message:opacity-100 sm:static sm:mt-1 sm:h-fit [@media(hover:none)]:opacity-100"
+            />
+          }
         >
           <FilterIcon />
-        </Link>
+        </Tooltip.Trigger>
       ) : null}
     </li>
   );
-}
+});
 
 function newMessageAnnouncement(added: ChatMessageView[]): string {
   const newest = added[0];
@@ -220,6 +248,7 @@ export function ChatTranscript({
   const [loading, setLoading] = useState<LoadKind | null>(null);
   const [failed, setFailed] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  const [tooltip] = useState(() => Tooltip.createHandle<string>());
   const topRef = useRef<HTMLDivElement>(null);
   const olderRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
@@ -497,129 +526,144 @@ export function ChatTranscript({
   const waitingCount = waiting.messages.length;
 
   return (
-    <div>
-      <div
-        ref={topRef}
-        className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400"
-      >
-        {hasNewer ? (
-          <span>
-            {positionLabel ?? "Earlier messages"}.{" "}
-            {positionLabel !== null ? (
-              <Link href={latestHref} className="font-semibold text-teal-200 hover:text-teal-100">
-                Back to the latest
-              </Link>
-            ) : (
-              <a
-                href={latestHref}
-                onClick={(event) => loadInPlace(event, "latest")}
-                className="font-semibold text-teal-200 hover:text-teal-100"
-              >
-                Back to the latest
-              </a>
-            )}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-            Live
-          </span>
-        )}
-        <span>Times in {timeZone}</span>
-      </div>
-
-      <p aria-live="polite" className="sr-only">
-        {announcement}
-      </p>
-
-      {waitingCount > 0 || waiting.overflow ? (
-        <button
-          type="button"
-          onClick={showWaitingAtTop}
-          className="fixed left-1/2 top-10 z-20 -translate-x-1/2 rounded-full border border-teal-400/60 bg-teal-900/90 px-3 py-1 text-xs font-semibold text-slate-50 shadow-[0_8px_20px_rgba(0,0,0,0.45)] hover:bg-teal-800"
+    <Tooltip.Provider delay={300}>
+      <div>
+        <div
+          ref={topRef}
+          className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400"
         >
-          ↑{" "}
-          {waiting.overflow
-            ? `${waitingCount}+ new messages`
-            : waitingCount === 1
-              ? "1 new message"
-              : `${waitingCount} new messages`}
-        </button>
-      ) : null}
+          {hasNewer ? (
+            <span>
+              {positionLabel ?? "Earlier messages"}.{" "}
+              {positionLabel !== null ? (
+                <Link href={latestHref} className="font-semibold text-teal-200 hover:text-teal-100">
+                  Back to the latest
+                </Link>
+              ) : (
+                <a
+                  href={latestHref}
+                  onClick={(event) => loadInPlace(event, "latest")}
+                  className="font-semibold text-teal-200 hover:text-teal-100"
+                >
+                  Back to the latest
+                </a>
+              )}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              Live
+            </span>
+          )}
+          <span>Times in {timeZone}</span>
+        </div>
 
-      <div className="rounded-sm border border-slate-600/35 bg-slate-950/60 [overflow-anchor:none]">
-        {hasNewer && newest ? (
-          <div className="flex justify-center border-b border-slate-800/70 py-3">
-            <a
-              href={chatHref(pagePath, filterQuery, { after: String(newest.id) })}
-              onClick={(event) => loadInPlace(event, "newer")}
-              className={ui.buttonGhost}
-            >
-              {loading === "newer" ? "Loading..." : "Show newer messages"}
-            </a>
-          </div>
-        ) : null}
+        <p aria-live="polite" className="sr-only">
+          {announcement}
+        </p>
 
-        {messages.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400">
-            {emptyLabel}
-            {hasNewer ? null : " New ones will appear here."}
-          </p>
-        ) : null}
-
-        <ol aria-label="Chat messages" aria-busy={loading !== null}>
-          {messages.map((message, index) => {
-            const day = message.sentAt?.day ?? null;
-            const newDay = day !== null && day !== messages[index - 1]?.sentAt?.day;
-            const playerId = message.playerId === null ? null : String(message.playerId);
-
-            return (
-              <Fragment key={message.id}>
-                {newDay && message.sentAt ? <DaySeparator label={message.sentAt.dayLabel} /> : null}
-                <ChatMessageRow
-                  message={message}
-                  terms={terms}
-                  anchored={anchorId === message.id}
-                  playerFilterHref={
-                    playerId !== null && playerId !== filterPlayerId
-                      ? chatHref(pagePath, filterQuery, { player: playerId })
-                      : null
-                  }
-                />
-              </Fragment>
-            );
-          })}
-        </ol>
-
-        {hasOlder && oldest ? (
-          <div ref={olderRef} className="flex justify-center border-t border-slate-800/70 py-3">
-            <a
-              href={chatHref(pagePath, filterQuery, { before: String(oldest.id) })}
-              onClick={(event) => loadInPlace(event, "older")}
-              className={ui.buttonGhost}
-            >
-              {loading === "older" ? "Loading..." : "Load older messages"}
-            </a>
-          </div>
-        ) : messages.length > 0 ? (
-          <p className="border-t border-slate-800/70 py-3 text-center text-[11px] uppercase tracking-wide text-slate-500">
-            {filtered ? "No earlier matching messages" : "Start of the chat log"}
-          </p>
-        ) : null}
-      </div>
-
-      {failed ? (
-        <p role="alert" className="mt-2 text-xs text-rose-200">
-          Messages could not be loaded.{" "}
+        {waitingCount > 0 || waiting.overflow ? (
           <button
             type="button"
-            onClick={() => setFailed(false)}
-            className="font-semibold underline hover:text-rose-100"
+            onClick={showWaitingAtTop}
+            className="fixed left-1/2 top-10 z-20 -translate-x-1/2 rounded-full border border-teal-400/60 bg-teal-900/90 px-3 py-1 text-xs font-semibold text-slate-50 shadow-[0_8px_20px_rgba(0,0,0,0.45)] hover:bg-teal-800"
           >
-            Try again
+            ↑{" "}
+            {waiting.overflow
+              ? `${waitingCount}+ new messages`
+              : waitingCount === 1
+                ? "1 new message"
+                : `${waitingCount} new messages`}
           </button>
-        </p>
-      ) : null}
-    </div>
+        ) : null}
+
+        <div className="rounded-sm border border-slate-600/35 bg-slate-950/60 [overflow-anchor:none]">
+          {hasNewer && newest ? (
+            <div className="flex justify-center border-b border-slate-800/70 py-3">
+              <a
+                href={chatHref(pagePath, filterQuery, { after: String(newest.id) })}
+                onClick={(event) => loadInPlace(event, "newer")}
+                className={ui.buttonGhost}
+              >
+                {loading === "newer" ? "Loading..." : "Show newer messages"}
+              </a>
+            </div>
+          ) : null}
+
+          {messages.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-400">
+              {emptyLabel}
+              {hasNewer ? null : " New ones will appear here."}
+            </p>
+          ) : null}
+
+          <ol aria-label="Chat messages" aria-busy={loading !== null}>
+            {messages.map((message, index) => {
+              const day = message.sentAt?.day ?? null;
+              const newDay = day !== null && day !== messages[index - 1]?.sentAt?.day;
+              const playerId = message.playerId === null ? null : String(message.playerId);
+
+              return (
+                <Fragment key={message.id}>
+                  {newDay && message.sentAt ? <DaySeparator label={message.sentAt.dayLabel} /> : null}
+                  <ChatMessageRow
+                    message={message}
+                    terms={terms}
+                    anchored={anchorId === message.id}
+                    playerFilterHref={
+                      playerId !== null && playerId !== filterPlayerId
+                        ? chatHref(pagePath, filterQuery, { player: playerId })
+                        : null
+                    }
+                    tooltip={tooltip}
+                  />
+                </Fragment>
+              );
+            })}
+          </ol>
+
+          {hasOlder && oldest ? (
+            <div ref={olderRef} className="flex justify-center border-t border-slate-800/70 py-3">
+              <a
+                href={chatHref(pagePath, filterQuery, { before: String(oldest.id) })}
+                onClick={(event) => loadInPlace(event, "older")}
+                className={ui.buttonGhost}
+              >
+                {loading === "older" ? "Loading..." : "Load older messages"}
+              </a>
+            </div>
+          ) : messages.length > 0 ? (
+            <p className="border-t border-slate-800/70 py-3 text-center text-[11px] uppercase tracking-wide text-slate-500">
+              {filtered ? "No earlier matching messages" : "Start of the chat log"}
+            </p>
+          ) : null}
+        </div>
+
+        {failed ? (
+          <p role="alert" className="mt-2 text-xs text-rose-200">
+            Messages could not be loaded.{" "}
+            <button
+              type="button"
+              onClick={() => setFailed(false)}
+              className="font-semibold underline hover:text-rose-100"
+            >
+              Try again
+            </button>
+          </p>
+        ) : null}
+
+        <Tooltip.Root handle={tooltip}>
+          {({ payload }) => (
+            <Tooltip.Portal>
+              <Tooltip.Positioner sideOffset={6} className="z-50">
+                <Tooltip.Popup className="max-w-xs rounded-sm border border-slate-600/70 bg-slate-900 px-2 py-1 text-xs text-slate-100 shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-opacity duration-100 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0">
+                  {payload}
+                </Tooltip.Popup>
+              </Tooltip.Positioner>
+            </Tooltip.Portal>
+          )}
+        </Tooltip.Root>
+      </div>
+    </Tooltip.Provider>
   );
 }
