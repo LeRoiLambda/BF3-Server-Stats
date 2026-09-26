@@ -517,8 +517,9 @@ async function getCurrentMuteStatus(
   return buildMuteStatus(rows[0]);
 }
 
+// Settings of every listed server; selectSettings() picks the shown server's,
+// or else those of the listed server with the lowest id that has any.
 async function listSettingsRows(
-  serverId: number | null,
   activeServerIds: number[],
   availability: ModerationAvailability
 ): Promise<SettingRow[]> {
@@ -527,27 +528,6 @@ async function listSettingsRows(
   }
 
   const pool = getDbPool();
-  const namesSql = placeholders(SETTING_NAMES.length);
-  if (serverId !== null) {
-    const [serverRows] = await pool.query<SettingRow[]>(
-      `
-        SELECT
-          server_id AS serverId,
-          setting_name AS settingName,
-          setting_value AS settingValue
-        FROM adkats_settings
-        WHERE server_id = ?
-          AND setting_name IN (${namesSql})
-        ORDER BY setting_name
-      `,
-      [serverId, ...SETTING_NAMES]
-    );
-
-    if (serverRows.length > 0) {
-      return serverRows;
-    }
-  }
-
   const scope = buildServerScopeCondition("server_id", {
     serverIds: activeServerIds
   });
@@ -559,7 +539,7 @@ async function listSettingsRows(
         setting_value AS settingValue
       FROM adkats_settings
       WHERE ${scope.sql}
-        AND setting_name IN (${namesSql})
+        AND setting_name IN (${placeholders(SETTING_NAMES.length)})
       ORDER BY server_id ASC, setting_name ASC
     `,
     [...scope.params, ...SETTING_NAMES]
@@ -1075,7 +1055,7 @@ export async function getPlayerModerationSummary(
   const [currentStatus, muteStatus, settingsRows] = await Promise.all([
     getCurrentStatus(input.playerId, availability),
     getCurrentMuteStatus(input, availability),
-    listSettingsRows(input.serverId, input.activeServerIds, availability)
+    listSettingsRows(input.activeServerIds, availability)
   ]);
   const initialSettings = parseSettings(settingsRows, input.serverId, null);
   const points = await getInfractionPoints(
@@ -1110,11 +1090,7 @@ export async function getModerationPolicy(
     };
   }
 
-  const settingsRows = await listSettingsRows(
-    input.serverId,
-    input.activeServerIds,
-    availability
-  );
+  const settingsRows = await listSettingsRows(input.activeServerIds, availability);
   const settings = parseSettings(settingsRows, input.serverId, null);
 
   return {
