@@ -1,5 +1,5 @@
--- Sample stats logger data. Times are relative to when this file is loaded and
--- written in UTC, so the site needs BF3_STATS_LOGGER_TIME_ZONE=UTC.
+-- Times are relative to when this file is loaded and written in UTC, so the
+-- site needs BF3_STATS_LOGGER_TIME_ZONE=UTC.
 
 SET NAMES utf8mb4;
 
@@ -23,7 +23,6 @@ VALUES
   (2, 0, '203.0.113.10:25300', 'Sample Close Quarters Server', 1, 8, 32, 'MP_Subway', 'Operation Metro', 'TeamDeathMatch0', NULL),
   (3, 0, '203.0.113.20:25200', 'Retired Server', 1, 0, 32, 'MP_001', 'Grand Bazaar', 'RushLarge0', 'off');
 
--- Players with a specific role in the sample, then 240 generated players.
 INSERT INTO tbl_playerdata (PlayerID, GameID, ClanTag, SoldierName, GlobalRank, CountryCode) VALUES
   (1, 1, NULL, 'Alex', 12, 'us'),
   (2, 1, 'SMPL', 'SuperAlex1', 145, 'de'),
@@ -134,7 +133,6 @@ FROM tbl_playerstats ps
 INNER JOIN tbl_server_player sp ON sp.StatsID = ps.StatsID
 GROUP BY sp.ServerID;
 
--- Completed sessions over the last twelve days, one to three per player.
 INSERT INTO tbl_sessions
   (StatsID, StartTime, EndTime, Score, Kills, Headshots, Deaths, TKs, Suicide, RoundCount,
    Playtime, Killstreak, Deathstreak, HighScore, Wins, Losses)
@@ -194,7 +192,6 @@ INSERT INTO tbl_teamscores (ServerID, TeamID, Score, WinningScore) VALUES
   (2, 1, 64, 100),
   (2, 2, 71, 100);
 
--- One row per round: two rounds per map, most recent first.
 INSERT INTO tbl_mapstats
   (ServerID, TimeMapLoad, TimeRoundStarted, TimeRoundEnd, MapName, Gamemode, Roundcount,
    NumberofRounds, MinPlayers, AvgPlayers, MaxPlayers, PlayersJoinedServer, PlayersLeftServer)
@@ -260,26 +257,29 @@ INNER JOIN tbl_server_player victim
   AND victim.StatsID IN (killer.StatsID + 1, killer.StatsID + 4)
 WHERE killer.ServerID = 1 AND killer.StatsID MOD 3 = 0;
 
+-- The logger inserts chat lines as they are sent, so ids follow time.
 INSERT INTO tbl_chatlog (logDate, ServerID, logSubset, logSoldierName, logMessage)
-SELECT
-  UTC_TIMESTAMP() - INTERVAL (n * 53 + 7) MINUTE,
-  1 + n MOD 2,
-  ELT(1 + n MOD 5, 'Global', 'Global', 'Team', 'Squad', 'Global'),
-  (SELECT SoldierName FROM tbl_playerdata WHERE PlayerID = 101 + (n * 7) MOD 240),
-  ELT(1 + n MOD 16, 'gg', 'nice shot', 'ak 47 is too strong', 'top 10 this week!',
-      'who is on the tank?', 'push the flag', 'medic!', 'anyone has ammo?',
-      'thanks for the revive', 'lag?', 'gg wp', 'nice round', 'rush B',
-      'that sniper on the hill...', 'need a pilot', 'ready up')
-FROM sample_numbers
-WHERE n < 240;
-
-INSERT INTO tbl_chatlog (logDate, ServerID, logSubset, logSoldierName, logMessage) VALUES
-  (UTC_TIMESTAMP() - INTERVAL 2 MINUTE, 1, 'Global', 'BrandNewGuy', 'hello, first time here'),
-  (UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 1, 'Global', 'Server', 'Welcome to the Sample Conquest Server!'),
-  (UTC_TIMESTAMP() - INTERVAL 1 DAY, 1, 'Global', 'Server', 'Next map: Grand Bazaar'),
-  (UTC_TIMESTAMP() - INTERVAL 2 DAY, 2, 'Global', 'Server', 'Welcome to the Sample Close Quarters Server!'),
-  (UTC_TIMESTAMP() - INTERVAL 5 HOUR, 1, 'Global', 'Müller', 'Grüße aus München'),
-  (UTC_TIMESTAMP() - INTERVAL 40 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOL'),
-  (UTC_TIMESTAMP() - INTERVAL 39 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOOOOOL');
+SELECT logDate, ServerID, logSubset, logSoldierName, logMessage
+FROM (
+  SELECT
+    UTC_TIMESTAMP() - INTERVAL (n * 53 + 7) MINUTE AS logDate,
+    1 + n MOD 2 AS ServerID,
+    ELT(1 + n MOD 5, 'Global', 'Global', 'Team', 'Squad', 'Global') AS logSubset,
+    (SELECT SoldierName FROM tbl_playerdata WHERE PlayerID = 101 + (n * 7) MOD 240) AS logSoldierName,
+    ELT(1 + n MOD 16, 'gg', 'nice shot', 'ak 47 is too strong', 'top 10 this week!',
+        'who is on the tank?', 'push the flag', 'medic!', 'anyone has ammo?',
+        'thanks for the revive', 'lag?', 'gg wp', 'nice round', 'rush B',
+        'that sniper on the hill...', 'need a pilot', 'ready up') AS logMessage
+  FROM sample_numbers
+  WHERE n < 240
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 2 MINUTE, 1, 'Global', 'BrandNewGuy', 'hello, first time here'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 3 MINUTE, 1, 'Global', 'Server', 'Welcome to the Sample Conquest Server!'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 1 DAY, 1, 'Global', 'Server', 'Next map: Grand Bazaar'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 2 DAY, 2, 'Global', 'Server', 'Welcome to the Sample Close Quarters Server!'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 5 HOUR, 1, 'Global', 'Müller', 'Grüße aus München'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 40 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOL'
+  UNION ALL SELECT UTC_TIMESTAMP() - INTERVAL 39 MINUTE, 1, 'Global', 'MutedTalker', 'LOOOOOOOOOL'
+) chat
+ORDER BY logDate;
 
 DROP TABLE sample_numbers;

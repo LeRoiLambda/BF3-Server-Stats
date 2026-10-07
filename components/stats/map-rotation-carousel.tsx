@@ -90,7 +90,6 @@ function findLiveIndex(
   return (flaggedMatch ?? matchingIndexes[0])?.index ?? -1;
 }
 
-// `selection` is a rotation index, or null for the live map.
 function buildRotationContext(
   rotation: MapRotationEntry[],
   currentMapCode: string | null,
@@ -415,7 +414,7 @@ export function MapRotationCarousel({
   }, [liveKey]);
 
   return (
-    <div className="stats-panel min-w-0 overflow-hidden rounded-sm p-0">
+    <div className="stats-panel min-w-0 overflow-hidden p-0">
       <div
         className={clsx(
           "relative h-48 overflow-hidden border-b border-slate-700/55 bg-slate-950 sm:h-52",

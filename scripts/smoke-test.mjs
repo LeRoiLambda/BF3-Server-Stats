@@ -1,8 +1,3 @@
-// Requests every page and API route of running servers backed by the sample
-// database (sample-db/) and fails on any unexpected status code.
-//
-//   node scripts/smoke-test.mjs http://127.0.0.1:3000 [more base URLs...]
-
 const SERVER_IDS = [1, 2];
 
 const ROUTES = [
@@ -14,6 +9,8 @@ const ROUTES = [
   ["/servers/leaders?q=M%C3%BCller", 200],
   ["/servers/chat", 200],
   ["/servers/chat?q=%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82", 200],
+  ["/servers/chat?player=17&channel=global", 200],
+  ["/servers/chat?date=2026-01-01&hour=12", 200],
   ["/servers/maps", 200],
   ["/servers/countries", 200],
   ["/servers/countries?c=US,us,A1", 200],
@@ -29,11 +26,20 @@ const ROUTES = [
     [`/servers/${id}/leaders?q=%25&page=3`, 200],
     [`/servers/${id}/chat`, 200],
     [`/servers/${id}/chat?q=ak%2047`, 200],
-    [`/servers/${id}/chat?q=today`, 200],
-    [`/servers/${id}/chat?q=last%20week`, 200],
-    [`/servers/${id}/chat?q=2026-01-01%2012%3A00`, 200],
+    [`/servers/${id}/chat?q=%22nice%20shot%22%20gg`, 200],
+    [`/servers/${id}/chat?q=50%25_off%5C%27`, 200],
     [`/servers/${id}/chat?q=%F0%9F%98%80`, 200],
-    [`/servers/${id}/chat?page=50000000000000000000`, 200],
+    [`/servers/${id}/chat?player=17`, 200],
+    [`/servers/${id}/chat?player=999999`, 200],
+    [`/servers/${id}/chat?channel=team`, 200],
+    [`/servers/${id}/chat?msg=5`, 200],
+    [`/servers/${id}/chat?date=2026-01-01`, 200],
+    [`/servers/${id}/chat?date=2026-01-01&hour=12`, 200],
+    [`/servers/${id}/chat?date=2026-03-08&hour=1`, 200],
+    [`/servers/${id}/chat?date=2026-02-30&hour=99`, 200],
+    [`/servers/${id}/chat?before=20`, 200],
+    [`/servers/${id}/chat?after=0`, 200],
+    [`/servers/${id}/chat?before=50000000000000000000`, 200],
     [`/servers/${id}/maps`, 200],
     [`/servers/${id}/maps?mode=ConquestLarge0`, 200],
     [`/servers/${id}/countries`, 200],
@@ -61,19 +67,20 @@ const ROUTES = [
   ["/api/servers", 200],
   ["/api/players/suggest?term=Alex", 200],
   ["/api/players/suggest?term=Alex&sid=2", 200],
-  ["/api/search/chat?term=gg", 200],
-  ["/api/search/chat?term=gg&sid=1", 200]
+  ["/api/chat", 200],
+  ["/api/chat?sid=1&q=gg", 200],
+  ["/api/chat?sid=2&before=100&channel=squad", 200],
+  ["/api/chat?sid=1&after=0&player=17", 200]
 ];
 
 async function waitForHealth(baseUrl) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const response = await fetch(`${baseUrl}/api/health`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // The server is still starting.
+    const ready = await fetch(`${baseUrl}/api/health`).then(
+      (response) => response.ok,
+      () => false
+    );
+    if (ready) {
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }

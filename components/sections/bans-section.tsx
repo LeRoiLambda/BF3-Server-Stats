@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { SortHeading } from "@/components/layout/sort-heading";
+import { ui } from "@/components/layout/stats-ui";
 import { DateTime } from "@/components/stats/date-time";
 import { ModerationPolicySection } from "@/components/stats/moderation-policy-section";
 import { StatsPager } from "@/components/stats/pager";
@@ -89,7 +89,7 @@ export async function BansSection({ scope, searchParams }: BansSectionProps) {
                     <th className={ui.th}>#</th>
                     {(Object.keys(SORT_LABELS) as BanSort[]).map((sortKey) => (
                       <th key={sortKey} className={ui.th}>
-                        <Link
+                        <SortHeading
                           href={scopeHref(scope, "bans", {
                             sort: sortKey,
                             order: nextOrder(
@@ -99,11 +99,9 @@ export async function BansSection({ scope, searchParams }: BansSectionProps) {
                               sortKey === "soldierName" ? "asc" : "desc"
                             )
                           })}
-                          className={sortableHeadingClass(sort === sortKey)}
-                        >
-                          {SORT_LABELS[sortKey]}
-                          {sort === sortKey ? (order === "asc" ? "↑" : "↓") : null}
-                        </Link>
+                          label={SORT_LABELS[sortKey]}
+                          activeOrder={sort === sortKey ? order : null}
+                        />
                       </th>
                     ))}
                     <th className={ui.th}>Ban Reason</th>

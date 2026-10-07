@@ -33,8 +33,8 @@ describe("section URLs", () => {
 
   it("keeps query values in order and leaves out empty ones", () => {
     expect(
-      scopeHref(oneServer, "chat", { sort: "date", order: "desc", q: null, page: "" })
-    ).toBe("/servers/2/chat?sort=date&order=desc");
+      scopeHref(oneServer, "leaders", { sort: "kdr", order: "desc", q: null, page: "" })
+    ).toBe("/servers/2/leaders?sort=kdr&order=desc");
     expect(scopeHref(allServers, "chat", { q: "ak 47" })).toBe("/servers/chat?q=ak+47");
   });
 });

@@ -1,5 +1,4 @@
--- Sample AdKats data for the players of 03-logger-data.sql. Record times are
--- in UTC, as AdKats writes them.
+-- Record times are in UTC, as AdKats writes them.
 
 SET NAMES utf8mb4;
 
@@ -19,16 +18,20 @@ INSERT INTO adkats_commands VALUES
   (92, 'Active', 'player_warn', 'Log', 'Warn Player', 'warn', TRUE, 'Any'),
   (146, 'Active', 'player_unmute', 'Log', 'Unmute Player', 'unmute', TRUE, 'Any');
 
--- AdKats links chat lines to players by name. Server messages, BrandNewGuy and
--- every fifth line (chat sent before a player's first stats upload) stay NULL.
+-- AdKats writes server 1's chat log (its "Post Stat Logger Chat Manually"
+-- setting) and links each line to the player in logPlayerID; the stats logger
+-- writes server 2's without. Server messages, BrandNewGuy and every fifth line
+-- (chat sent before AdKats loaded the player) stay NULL.
 UPDATE tbl_chatlog cl
 INNER JOIN tbl_playerdata pd ON pd.SoldierName = cl.logSoldierName
 SET cl.logPlayerID = pd.PlayerID
-WHERE cl.ID MOD 5 <> 0;
+WHERE cl.ServerID = 1
+  AND cl.ID MOD 5 <> 0;
 
 INSERT INTO adkats_settings (server_id, setting_name, setting_type, setting_value) VALUES
   (1, 'Punishment Hierarchy', 'String[]', 'warn|kill|kick|tban60|tban1440|ban'),
   (1, 'Combine Server Punishments', 'Boolean', 'True'),
+  (1, 'Post Stat Logger Chat Manually', 'Boolean', 'True'),
   (2, 'Punishment Hierarchy', 'String[]', 'kill|kick|tban120|ban'),
   (2, 'Combine Server Punishments', 'Boolean', 'False'),
   (3, 'Punishment Hierarchy', 'String[]', 'ban');

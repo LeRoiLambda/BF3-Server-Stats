@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
+import { HintProvider } from "@/components/layout/hint";
 import "./globals.css";
 
-// Pages show live database data: they render on every request, and the build
-// never connects to the database.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -17,7 +16,11 @@ type RootLayoutProps = Readonly<{
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="relative">
+        <HintProvider>
+          <div className="isolate">{children}</div>
+        </HintProvider>
+      </body>
     </html>
   );
 }

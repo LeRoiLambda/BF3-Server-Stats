@@ -1,48 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { importWithEnv } from "./test-env";
 
-async function siteClock(timeZone: string) {
-  return importWithEnv(
-    { BF3_STATS_TIME_ZONE: timeZone },
-    () => import("@/src/server/utils/site-time")
-  );
-}
-
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("formatSiteTime", () => {
-  it("labels times with the zone's abbreviation", async () => {
-    const { formatSiteTime } = await siteClock("America/Los_Angeles");
+describe("siteTimeZoneCity", () => {
+  async function siteTimeZoneCity(timeZone: string) {
+    const siteTime = await importWithEnv(
+      { BF3_STATS_TIME_ZONE: timeZone },
+      () => import("@/src/server/utils/site-time")
+    );
+    return siteTime.siteTimeZoneCity();
+  }
 
-    expect(formatSiteTime(new Date("2026-09-25T16:00:00Z"))).toBe("2026-09-25 09:00:00 PDT");
-    expect(formatSiteTime(new Date("2026-01-15T16:00:00Z"))).toBe("2026-01-15 08:00:00 PST");
+  it("names the city of the site's zone", async () => {
+    expect(await siteTimeZoneCity("America/Los_Angeles")).toBe("Los Angeles");
+    expect(await siteTimeZoneCity("America/Argentina/Buenos_Aires")).toBe("Buenos Aires");
+    expect(await siteTimeZoneCity("Europe/Paris")).toBe("Paris");
   });
 
-  it("labels zones without an English abbreviation with their UTC offset", async () => {
-    const { formatSiteTime } = await siteClock("Europe/Paris");
-
-    expect(formatSiteTime(new Date("2026-09-25T16:00:00Z"))).toBe("2026-09-25 18:00:00 GMT+2");
-  });
-});
-
-describe("siteDatesBetween", () => {
-  it("lists the dates on the site's clock", async () => {
-    const { siteDatesBetween } = await siteClock("America/Los_Angeles");
-
-    expect(
-      siteDatesBetween(new Date("2026-09-24T00:00:00Z"), new Date("2026-09-24T23:59:59Z"))
-    ).toEqual(["2026-09-23", "2026-09-24"]);
-  });
-});
-
-describe("siteDateStart", () => {
-  it("finds midnight on the site's clock", async () => {
-    const { siteDateStart } = await siteClock("America/Los_Angeles");
-
-    expect(siteDateStart("2026-09-24").toISOString()).toBe("2026-09-24T07:00:00.000Z");
-    // 1 November 2026 lasts 25 hours in Los Angeles.
-    expect(siteDateStart("2026-11-01", 1).toISOString()).toBe("2026-11-02T08:00:00.000Z");
+  it("keeps a zone without a city as it is", async () => {
+    expect(await siteTimeZoneCity("UTC")).toBe("UTC");
   });
 });

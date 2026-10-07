@@ -1,13 +1,13 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import {
   buildServerScopeCondition,
-  normalizeServerScopeInput,
   type ServerScopeInput
 } from "@/src/server/repositories/server-scope";
 import { fromLoggerTime, toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
-import { siteDatesBetween, siteDateStart } from "@/src/server/utils/site-time";
+import { datesInZone, dayStartInZone } from "@/src/server/utils/time-zones";
 
 export type ServerDetailStats = {
   countPlayers: number;
@@ -37,7 +37,6 @@ export type ServerRoundSnapshot = {
   leftPlayers: number;
 };
 
-// `date` is a "YYYY-MM-DD" date on the site's clock.
 export type ServerDailyPlayersSnapshot = {
   date: string;
   averagePlayers: number;
@@ -49,7 +48,6 @@ type ServerDetailStatsRow = RowDataPacket & {
   countPlayers: number | null;
   totalKills: number | null;
   totalDeaths: number | null;
-  totalRounds: number | null;
   averageScore: number | null;
   averageKills: number | null;
   averageHeadshots: number | null;
@@ -73,53 +71,53 @@ type ServerRoundSnapshotRow = RowDataPacket & {
   leftPlayers: number | null;
 };
 
+type RoundCountRow = RowDataPacket & {
+  totalRounds: number | null;
+};
+
 type LoggerDateRow = RowDataPacket & {
   loggerDate: string | null;
 };
 
 type ServerDailyPlayersSnapshotRow = RowDataPacket & {
-  siteDate: string | null;
+  dayDate: string | null;
   averagePlayers: number | null;
   peakPlayers: number | null;
   roundCount: number | null;
 };
 
-// A day on the site's clock, with its start and end on the logger's clock.
-type SiteDay = {
+type ZoneDay = {
   date: string;
   start: string;
   end: string;
 };
 
 export async function getServerDetailStats(
-  input: number | ServerScopeInput
+  input: ServerScopeInput
 ): Promise<ServerDetailStats | null> {
   const pool = getDbPool();
-  const scopeInput = normalizeServerScopeInput(input);
-  const scope = buildServerScopeCondition("ServerID", scopeInput);
-  const playerScope = buildServerScopeCondition("tsp.ServerID", scopeInput);
-  const hasAllServersScope = (scopeInput.serverIds?.length ?? 0) > 0;
-  const [rows] = await pool.query<ServerDetailStatsRow[]>(
+  const scope = buildServerScopeCondition("ServerID", input);
+  const playerScope = buildServerScopeCondition("tsp.ServerID", input);
+  const hasAllServersScope = (input.serverIds?.length ?? 0) > 0;
+  const statsQuery = pool.query<ServerDetailStatsRow[]>(
     hasAllServersScope
       ? `
         SELECT
           MAX(players.countPlayers) AS countPlayers,
           SUM(SumKills) AS totalKills,
           SUM(SumDeaths) AS totalDeaths,
-          SUM(SumRounds) AS totalRounds,
           (SUM(SumScore) / NULLIF(MAX(players.countPlayers), 0)) AS averageScore,
           (SUM(SumKills) / NULLIF(MAX(players.countPlayers), 0)) AS averageKills,
           (SUM(SumHeadshots) / NULLIF(MAX(players.countPlayers), 0)) AS averageHeadshots,
           (SUM(SumDeaths) / NULLIF(MAX(players.countPlayers), 0)) AS averageDeaths,
           (SUM(SumSuicide) / NULLIF(MAX(players.countPlayers), 0)) AS averageSuicides,
           (SUM(SumTKs) / NULLIF(MAX(players.countPlayers), 0)) AS averageTeamKills,
-          (SUM(SumKills) / NULLIF(SUM(SumDeaths), 0)) AS averageKdr,
+          ${perAtLeastOneSql("SUM(SumKills)", "SUM(SumDeaths)")} AS averageKdr,
           ((SUM(SumHeadshots) / NULLIF(SUM(SumKills), 0)) * 100) AS averageHsr
         FROM tbl_server_stats
         CROSS JOIN (
           SELECT COUNT(DISTINCT tsp.PlayerID) AS countPlayers
           FROM tbl_server_player tsp
-          INNER JOIN tbl_playerstats tps ON tps.StatsID = tsp.StatsID
           WHERE ${playerScope.sql}
         ) players
         WHERE ${scope.sql}
@@ -129,14 +127,13 @@ export async function getServerDetailStats(
           CountPlayers AS countPlayers,
           SumKills AS totalKills,
           SumDeaths AS totalDeaths,
-          SumRounds AS totalRounds,
           AvgScore AS averageScore,
           AvgKills AS averageKills,
           AvgHeadshots AS averageHeadshots,
           AvgDeaths AS averageDeaths,
           AvgSuicide AS averageSuicides,
           AvgTKs AS averageTeamKills,
-          (SumKills / NULLIF(SumDeaths, 0)) AS averageKdr,
+          ${perAtLeastOneSql("SumKills", "SumDeaths")} AS averageKdr,
           ((SumHeadshots / NULLIF(SumKills, 0)) * 100) AS averageHsr
         FROM tbl_server_stats
         WHERE ${scope.sql}
@@ -144,6 +141,18 @@ export async function getServerDetailStats(
       `,
     hasAllServersScope ? [...playerScope.params, ...scope.params] : scope.params
   );
+  // Not tbl_server_stats.SumRounds, which adds up every player's rounds.
+  const roundsQuery = pool.query<RoundCountRow[]>(
+    `
+      SELECT COUNT(*) AS totalRounds
+      FROM tbl_mapstats
+      WHERE ${scope.sql}
+        AND Gamemode != ''
+        AND MapName != ''
+    `,
+    scope.params
+  );
+  const [[rows], [roundRows]] = await Promise.all([statsQuery, roundsQuery]);
 
   const row = rows[0];
   if (!row || row.countPlayers === null || row.countPlayers === undefined) {
@@ -154,7 +163,7 @@ export async function getServerDetailStats(
     countPlayers: Number(row.countPlayers ?? 0),
     totalKills: Number(row.totalKills ?? 0),
     totalDeaths: Number(row.totalDeaths ?? 0),
-    totalRounds: Number(row.totalRounds ?? 0),
+    totalRounds: Number(roundRows[0]?.totalRounds ?? 0),
     averageScore: toFixedNumber(row.averageScore),
     averageKills: toFixedNumber(row.averageKills),
     averageHeadshots: toFixedNumber(row.averageHeadshots),
@@ -167,7 +176,7 @@ export async function getServerDetailStats(
 }
 
 export async function listRecentServerRounds(
-  input: number | ServerScopeInput,
+  input: ServerScopeInput,
   limit = 15
 ): Promise<ServerRoundSnapshot[]> {
   const pool = getDbPool();
@@ -209,23 +218,19 @@ export async function listRecentServerRounds(
   }));
 }
 
-// A day on the site's clock overlaps at most two days on the logger's clock,
-// so the rounds of the latest 2n + 2 logger days with rounds hold at least
-// n + 1 site days with rounds. Only the earliest of those can start before
-// them.
-function loggerDateLimit(siteDayCount: number): number {
-  return siteDayCount * 2 + 2;
+// A day in any time zone overlaps at most two days on the logger's clock.
+function loggerDateLimit(dayCount: number): number {
+  return dayCount * 2 + 2;
 }
 
-// The site's days that overlap the given days on the logger's clock.
-export function siteDaysOverlapping(loggerDates: string[]): SiteDay[] {
+export function daysOverlapping(loggerDates: string[], timeZone: string): ZoneDay[] {
   const dates = new Set<string>();
 
   for (const loggerDate of loggerDates) {
     const first = fromLoggerTime(`${loggerDate} 00:00:00`);
     const last = fromLoggerTime(`${loggerDate} 23:59:59`);
     if (first && last) {
-      for (const date of siteDatesBetween(first, last)) {
+      for (const date of datesInZone(first, last, timeZone)) {
         dates.add(date);
       }
     }
@@ -235,15 +240,15 @@ export function siteDaysOverlapping(loggerDates: string[]): SiteDay[] {
     .sort()
     .map((date) => ({
       date,
-      start: toLoggerTime(siteDateStart(date)),
-      end: toLoggerTime(siteDateStart(date, 1))
+      start: toLoggerTime(dayStartInZone(date, timeZone)),
+      end: toLoggerTime(dayStartInZone(date, timeZone, 1))
     }));
 }
 
-// The latest `limit` days on the site's clock that had rounds.
 export async function listServerDailyPlayerTrend(
-  input: number | ServerScopeInput,
-  limit = 7
+  input: ServerScopeInput,
+  limit: number,
+  timeZone: string
 ): Promise<ServerDailyPlayersSnapshot[]> {
   const pool = getDbPool();
   const boundedLimit = Math.max(1, Math.min(31, Math.floor(limit)));
@@ -269,7 +274,7 @@ export async function listServerDailyPlayerTrend(
   const loggerDates = dateRows
     .map((row) => row.loggerDate)
     .filter((date): date is string => fromLoggerTime(`${date} 00:00:00`) !== null);
-  const days = siteDaysOverlapping(loggerDates);
+  const days = daysOverlapping(loggerDates, timeZone);
   if (days.length === 0) {
     return [];
   }
@@ -280,33 +285,32 @@ export async function listServerDailyPlayerTrend(
       SELECT
         CASE
           ${days.map(() => "WHEN TimeMapLoad >= ? AND TimeMapLoad < ? THEN ?").join("\n          ")}
-        END AS siteDate,
+        END AS dayDate,
         AVG(MaxPlayers) AS averagePlayers,
         MAX(MaxPlayers) AS peakPlayers,
         COUNT(*) AS roundCount
       FROM tbl_mapstats
       WHERE ${roundsSql}
         AND TimeMapLoad >= ?
-      GROUP BY siteDate
+      GROUP BY dayDate
     `,
     [...days.flatMap((day) => [day.start, day.end, day.date]), ...scope.params, since]
   );
 
-  // A day that starts before `since` is missing its earlier rounds, unless the
-  // logger has none before `since`.
+  // A day that starts before `since` can miss rounds.
   const noEarlierRounds = dateRows.length < dateLimit;
   const completeDates = new Set(
     days.filter((day) => noEarlierRounds || day.start >= since).map((day) => day.date)
   );
 
   return rows
-    .filter((row): row is ServerDailyPlayersSnapshotRow & { siteDate: string } =>
-      row.siteDate !== null && completeDates.has(row.siteDate)
+    .filter((row): row is ServerDailyPlayersSnapshotRow & { dayDate: string } =>
+      row.dayDate !== null && completeDates.has(row.dayDate)
     )
-    .sort((a, b) => b.siteDate.localeCompare(a.siteDate))
+    .sort((a, b) => b.dayDate.localeCompare(a.dayDate))
     .slice(0, boundedLimit)
     .map((row) => ({
-      date: row.siteDate,
+      date: row.dayDate,
       averagePlayers: toFixedNumber(row.averagePlayers),
       peakPlayers: Number(row.peakPlayers ?? 0),
       roundCount: Number(row.roundCount ?? 0)

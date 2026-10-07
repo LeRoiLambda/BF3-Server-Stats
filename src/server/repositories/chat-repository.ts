@@ -3,79 +3,79 @@ import { getDbPool } from "@/src/server/db/pool";
 import { hasColumn, hasTable } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
+import type { ChatChannel, ChatPosition } from "@/src/server/routing/chat-params";
 import { fromLoggerTime, toLoggerTime } from "@/src/server/utils/logger-clock";
-import { formatSiteTime, siteTimeZone } from "@/src/server/utils/site-time";
 import {
+  formatSqlDateTime,
   naiveDateToWallClock,
-  wallClockInTimeZone,
-  wallClockToInstant,
-  wallClockToNaiveDate
+  parseUtcDateTime
 } from "@/src/server/utils/time-zones";
 
-export type ChatSort = "date" | "soldierName" | "message";
-export type ChatOrder = "asc" | "desc";
-
-export type ChatQueryInput = {
-  serverId?: number;
-  serverIds?: number[];
-  gameId: number;
-  sort: ChatSort;
-  order: ChatOrder;
-  page: number;
-  pageSize: number;
-  query: string | null;
+export type ChatPlayer = {
+  playerId: number;
+  soldierName: string;
+  countryCode: string | null;
 };
 
-export type ChatLogEntry = {
+export type ChatMessage = {
   id: number;
   serverId: number;
   serverName: string | null;
-  logDate: Date | null;
-  soldierName: string;
-  countryCode: string | null;
-  message: string;
-  subset: string | null;
+  sentAt: Date | null;
+  speaker: string;
   playerId: number | null;
+  countryCode: string | null;
   banStatus: "active" | "expired" | null;
+  subset: string | null;
+  text: string;
 };
 
-export type ChatDateRange = {
-  low: Date;
-  high: Date;
+export type ChatLogInput = {
+  serverIds: number[];
+  gameId: number;
+  terms: string[];
+  playerId: number | null;
+  channel: ChatChannel | null;
+  position: ChatPosition;
+  size: number;
 };
 
-export type ChatSearchSuggestionKind = "date" | "player" | "message";
-
-export type ChatSearchSuggestion = {
-  kind: ChatSearchSuggestionKind;
-  value: string;
-  label: string;
-  detail: string | null;
+export type ChatLog = {
+  player: ChatPlayer | null;
+  messages: ChatMessage[];
+  hasOlder: boolean;
+  hasNewer: boolean;
+  latestLoggedId: number;
 };
 
-export type ChatSearchSuggestionInput = {
-  serverId?: number;
-  serverIds?: number[];
-  query: string;
-  limit: number;
+export type ChatWindow = {
+  ids: number[];
+  hasOlder: boolean;
+  hasNewer: boolean;
 };
 
-export type ChatLogResult = {
-  entries: ChatLogEntry[];
-  totalRows: number | null;
-  totalPages: number | null;
-  page: number;
-  pageSize: number;
-  hasNextPage: boolean;
-  dateRange: ChatDateRange | null;
+type Condition = {
+  sql: string;
+  params: Array<string | number>;
 };
 
-type ChatPageIdRow = RowDataPacket & {
+type IdRow = RowDataPacket & {
   id: number;
 };
 
-type ChatCountRow = RowDataPacket & {
-  totalRows: number;
+type SentRow = RowDataPacket & {
+  id: number;
+  logDate: string | null;
+};
+
+type ServerIdRow = RowDataPacket & {
+  serverId: number;
+};
+
+type ChatPlayerRow = RowDataPacket & {
+  playerId: number;
+  soldierName: string | null;
+  countryCode: string | null;
 };
 
 type ChatRow = RowDataPacket & {
@@ -85,496 +85,249 @@ type ChatRow = RowDataPacket & {
   logDate: string | null;
   soldierName: string | null;
   countryCode: string | null;
-  message: string;
+  message: string | null;
   subset: string | null;
   playerId: number | null;
   banStatus?: string | null;
 };
 
-type ChatSuggestionRow = RowDataPacket & {
-  value: string | null;
-  lastSeen: string | null;
+const MAX_CHAT_WINDOW_SIZE = 100;
+
+const CHANNEL_SUBSETS: Record<ChatChannel, string> = {
+  global: "Global",
+  team: "Team",
+  squad: "Squad"
 };
 
-// Highest ?page= served, which keeps LIMIT/OFFSET within MySQL's range.
-const MAX_CHAT_PAGE = 1_000_000;
+const EMPTY_WINDOW: ChatWindow = { ids: [], hasOlder: false, hasNewer: false };
 
-const DATE_QUERY_PATTERN =
-  /^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?)?$/;
-const CURRENT_OR_LAST_PERIOD_PATTERN = /^(this|last) (week|month|year)$/;
-const PERIODS_AGO_PATTERN = /^(\d{1,3}) (day|week|month|year)s? ago$/;
-
-type CalendarPeriod = "day" | "week" | "month" | "year";
-
-// Range on the site's clock, held in Dates whose UTC fields are the wall-clock
-// fields.
-type WallClockRange = {
-  low: Date;
-  high: Date;
-};
-
-const SORT_SQL: Record<ChatSort, string> = {
-  date: "cl.logDate",
-  soldierName: "cl.logSoldierName",
-  message: "cl.logMessage"
-};
-
-function normalizeSort(value: string | null): ChatSort {
-  switch (value) {
-    case "date":
-    case "soldierName":
-    case "message":
-      return value;
-    default:
-      return "date";
-  }
-}
-
-function normalizeOrder(value: string | null): ChatOrder {
-  return value === "asc" ? "asc" : "desc";
-}
-
-function normalizePage(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 1;
-  }
-
-  return Math.min(Math.floor(value), MAX_CHAT_PAGE);
-}
-
-function normalizeQuery(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function addSeconds(date: Date, seconds: number): Date {
-  return new Date(date.getTime() + seconds * 1000);
-}
-
-function startOfPeriod(date: Date, period: CalendarPeriod): Date {
-  const start = new Date(Date.UTC(
-    date.getUTCFullYear(),
-    period === "year" ? 0 : date.getUTCMonth(),
-    period === "month" || period === "year" ? 1 : date.getUTCDate()
-  ));
-
-  if (period === "week") {
-    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
-  }
-
-  return start;
-}
-
-function shiftPeriod(date: Date, period: CalendarPeriod, amount: number): Date {
-  const shifted = new Date(date);
-
-  switch (period) {
-    case "day":
-      shifted.setUTCDate(shifted.getUTCDate() + amount);
-      break;
-    case "week":
-      shifted.setUTCDate(shifted.getUTCDate() + amount * 7);
-      break;
-    case "month":
-      shifted.setUTCMonth(shifted.getUTCMonth() + amount);
-      break;
-    case "year":
-      shifted.setUTCFullYear(shifted.getUTCFullYear() + amount);
-      break;
-  }
-
-  return shifted;
-}
-
-// The whole calendar period (Monday-based for weeks) `periodsAgo` periods
-// before the one containing `date`.
-function calendarPeriodRange(
-  date: Date,
-  period: CalendarPeriod,
-  periodsAgo: number
-): WallClockRange {
-  const low = shiftPeriod(startOfPeriod(date, period), period, -periodsAgo);
+export function centerChatWindow(older: number[], newer: number[], size: number): ChatWindow {
+  const half = Math.floor(size / 2);
+  const newerCount = Math.min(newer.length, size - Math.min(older.length, half));
+  const olderCount = Math.min(older.length, size - newerCount);
 
   return {
-    low,
-    high: addSeconds(shiftPeriod(low, period, 1), -1)
+    ids: [...newer.slice(0, newerCount).reverse(), ...older.slice(0, olderCount)],
+    hasOlder: older.length > olderCount,
+    hasNewer: newer.length > newerCount
   };
 }
 
-// "2024-01" matches that month, "2024-01-15" that day, and "2024-01-15 21:30"
-// five minutes either side.
-function parseDateQuery(query: string): WallClockRange | null {
-  const match = DATE_QUERY_PATTERN.exec(query);
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const hasDay = match[3] !== undefined;
-  const day = hasDay ? Number(match[3]) : 1;
-  const hasTime = match[4] !== undefined;
-  const hour = hasTime ? Number(match[4]) : 0;
-  const minute = hasTime ? Number(match[5]) : 0;
-  const second = match[6] !== undefined ? Number(match[6]) : 0;
-  const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-
-  // Rejects impossible values such as 2024-02-31 or 25:00.
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day ||
-    date.getUTCHours() !== hour ||
-    date.getUTCMinutes() !== minute ||
-    date.getUTCSeconds() !== second
-  ) {
-    return null;
-  }
-
-  if (!hasDay) {
-    return calendarPeriodRange(date, "month", 0);
-  }
-
-  if (!hasTime) {
-    return calendarPeriodRange(date, "day", 0);
-  }
-
-  return {
-    low: addSeconds(date, -5 * 60),
-    high: addSeconds(date, 5 * 60)
-  };
+// AdKats writes the chat log in UTC where its "Post Stat Logger Chat Manually" setting is on.
+export function chatLogTime(instant: Date, postedByAdkats: boolean): string {
+  return postedByAdkats
+    ? formatSqlDateTime(naiveDateToWallClock(instant))
+    : toLoggerTime(instant);
 }
 
-function parseCalendarQuery(query: string, today: Date): WallClockRange | null {
-  if (query === "today") {
-    return calendarPeriodRange(today, "day", 0);
-  }
-
-  if (query === "yesterday") {
-    return calendarPeriodRange(today, "day", 1);
-  }
-
-  const currentOrLast = CURRENT_OR_LAST_PERIOD_PATTERN.exec(query);
-  if (currentOrLast) {
-    return calendarPeriodRange(
-      today,
-      currentOrLast[2] as CalendarPeriod,
-      currentOrLast[1] === "last" ? 1 : 0
-    );
-  }
-
-  const periodsAgo = PERIODS_AGO_PATTERN.exec(query);
-  if (periodsAgo) {
-    return calendarPeriodRange(
-      today,
-      periodsAgo[2] as CalendarPeriod,
-      Number(periodsAgo[1])
-    );
-  }
-
-  return null;
+export function chatLogInstant(value: unknown, postedByAdkats: boolean): Date | null {
+  return postedByAdkats ? parseUtcDateTime(value) : fromLoggerTime(value);
 }
 
-// Only queries that parse as dates become date ranges; any other text, such as
-// "ak 47" or "top 10", is matched against names and messages. Dates and
-// periods such as "today" are read on the site's clock, like the times shown.
-export function resolveChatDateRange(query: string | null): ChatDateRange | null {
-  const trimmed = query?.trim();
-  if (!trimmed) {
-    return null;
-  }
+async function readLatestLoggedId(): Promise<number> {
+  const [rows] = await getDbPool().query<IdRow[]>(
+    "SELECT COALESCE(MAX(ID), 0) AS id FROM tbl_chatlog"
+  );
 
-  const phrase = trimmed.toLowerCase().replace(/\s+/g, " ");
-  const now = new Date();
-  if (phrase === "now" || phrase === "last hour") {
-    return {
-      low: addSeconds(now, -3600),
-      high: now
-    };
-  }
-
-  const timeZone = siteTimeZone();
-  const range =
-    parseDateQuery(trimmed) ??
-    parseCalendarQuery(phrase, wallClockToNaiveDate(wallClockInTimeZone(now, timeZone)));
-  if (!range) {
-    return null;
-  }
-
-  const low = wallClockToInstant(naiveDateToWallClock(range.low), timeZone);
-  const high = wallClockToInstant(naiveDateToWallClock(range.high), timeZone);
-
-  return {
-    low,
-    high: low.getTime() <= now.getTime() && high.getTime() > now.getTime() ? now : high
-  };
+  return Number(rows[0]?.id ?? 0);
 }
 
-function addSuggestion(
-  suggestions: ChatSearchSuggestion[],
-  seen: Set<string>,
-  suggestion: ChatSearchSuggestion,
+async function listAdkatsChatServerIds(serverIds: number[]): Promise<Set<number>> {
+  if (serverIds.length === 0 || !(await hasTable("adkats_settings"))) {
+    return new Set();
+  }
+
+  const scope = buildServerScopeCondition("server_id", { serverIds });
+  const [rows] = await getDbPool().query<ServerIdRow[]>(
+    `
+      SELECT server_id AS serverId
+      FROM adkats_settings
+      WHERE ${scope.sql}
+        AND setting_name = 'Post Stat Logger Chat Manually'
+        AND LOWER(TRIM(setting_value)) = 'true'
+    `,
+    scope.params
+  );
+
+  return new Set(rows.map((row) => Number(row.serverId)));
+}
+
+export async function getChatPlayer(
+  playerId: number,
+  gameId: number
+): Promise<ChatPlayer | null> {
+  const [rows] = await getDbPool().query<ChatPlayerRow[]>(
+    `
+      SELECT
+        PlayerID AS playerId,
+        SoldierName AS soldierName,
+        CountryCode AS countryCode
+      FROM tbl_playerdata
+      WHERE PlayerID = ?
+        AND GameID = ?
+      LIMIT 1
+    `,
+    [playerId, gameId]
+  );
+
+  const row = rows[0];
+  return row?.soldierName
+    ? {
+        playerId: Number(row.playerId),
+        soldierName: row.soldierName,
+        countryCode: row.countryCode ?? null
+      }
+    : null;
+}
+
+async function messageFilter(input: ChatLogInput, player: ChatPlayer | null): Promise<Condition> {
+  const scope = buildServerScopeCondition("cl.ServerID", { serverIds: input.serverIds });
+  const parts = [scope.sql];
+  const params: Array<string | number> = [...scope.params];
+
+  if (input.channel) {
+    parts.push("cl.logSubset = ?");
+    params.push(CHANNEL_SUBSETS[input.channel]);
+  }
+
+  if (player) {
+    const speakerSql = `${searchableText("cl.logSoldierName")} = ?`;
+    if (await hasColumn("tbl_chatlog", "logPlayerID")) {
+      parts.push(`(cl.logPlayerID = ? OR (cl.logPlayerID IS NULL AND ${speakerSql}))`);
+      params.push(player.playerId, player.soldierName);
+    } else {
+      parts.push(speakerSql);
+      params.push(player.soldierName);
+    }
+  }
+
+  for (const term of input.terms) {
+    parts.push(`${searchableText("cl.logMessage")} LIKE ?`);
+    params.push(containsPattern(term));
+  }
+
+  return { sql: parts.join(" AND "), params };
+}
+
+async function selectMessageIds(
+  filter: Condition,
+  bound: Condition | null,
+  direction: "ASC" | "DESC",
   limit: number
-) {
-  if (suggestions.length >= limit) {
-    return;
-  }
+): Promise<number[]> {
+  const [rows] = await getDbPool().query<IdRow[]>(
+    `
+      SELECT cl.ID AS id
+      FROM tbl_chatlog cl
+      WHERE ${filter.sql}
+        ${bound ? `AND ${bound.sql}` : ""}
+      ORDER BY cl.ID ${direction}
+      LIMIT ?
+    `,
+    [...filter.params, ...(bound?.params ?? []), limit]
+  );
 
-  const key = `${suggestion.kind}:${suggestion.value.trim().toLowerCase()}`;
-  if (seen.has(key) || !suggestion.value.trim()) {
-    return;
-  }
-
-  seen.add(key);
-  suggestions.push(suggestion);
+  return rows.map((row) => Number(row.id));
 }
 
-export function parseChatSort(value: string | null): ChatSort {
-  return normalizeSort(value);
+async function selectLatestWindow(filter: Condition, size: number): Promise<ChatWindow> {
+  const ids = await selectMessageIds(filter, null, "DESC", size + 1);
+
+  return { ids: ids.slice(0, size), hasOlder: ids.length > size, hasNewer: false };
 }
 
-export function parseChatOrder(value: string | null): ChatOrder {
-  return normalizeOrder(value);
+async function selectWindowBefore(
+  filter: Condition,
+  messageId: number,
+  size: number
+): Promise<ChatWindow> {
+  const ids = await selectMessageIds(
+    filter,
+    { sql: "cl.ID < ?", params: [messageId] },
+    "DESC",
+    size + 1
+  );
+
+  return { ids: ids.slice(0, size), hasOlder: ids.length > size, hasNewer: true };
 }
 
-export function parseChatPage(value: string | null): number {
-  if (!value) {
-    return 1;
-  }
+async function selectWindowAround(
+  filter: Condition,
+  anchorId: number,
+  size: number
+): Promise<ChatWindow> {
+  const [older, newer] = await Promise.all([
+    selectMessageIds(filter, { sql: "cl.ID < ?", params: [anchorId] }, "DESC", size + 1),
+    selectMessageIds(filter, { sql: "cl.ID >= ?", params: [anchorId] }, "ASC", size + 1)
+  ]);
 
-  return normalizePage(Number.parseInt(value, 10));
+  return centerChatWindow(older, newer, size);
 }
 
-export async function searchChatSuggestions(
-  input: ChatSearchSuggestionInput
-): Promise<ChatSearchSuggestion[]> {
-  const query = normalizeQuery(input.query);
-  if (!query || query.length < 2) {
+async function firstMessageIdSince(
+  filter: Condition,
+  instant: Date,
+  serverIds: number[],
+  adkatsServerIds: Set<number>
+): Promise<number | null> {
+  const groups = [true, false]
+    .map((postedByAdkats) => ({
+      postedByAdkats,
+      serverIds: serverIds.filter((serverId) => adkatsServerIds.has(serverId) === postedByAdkats)
+    }))
+    .filter((group) => group.serverIds.length > 0);
+  const firsts = await Promise.all(
+    groups.map(async (group) => {
+      const scope = buildServerScopeCondition("cl.ServerID", { serverIds: group.serverIds });
+      const [rows] = await getDbPool().query<SentRow[]>(
+        `
+          SELECT cl.ID AS id, cl.logDate AS logDate
+          FROM tbl_chatlog cl
+          WHERE ${filter.sql}
+            AND ${scope.sql}
+            AND cl.logDate >= ?
+          ORDER BY cl.logDate ASC, cl.ID ASC
+          LIMIT 1
+        `,
+        [...filter.params, ...scope.params, chatLogTime(instant, group.postedByAdkats)]
+      );
+      const row = rows[0];
+
+      return row
+        ? {
+            id: Number(row.id),
+            sentAt: chatLogInstant(row.logDate, group.postedByAdkats)?.getTime() ?? Infinity
+          }
+        : null;
+    })
+  );
+  const [first] = firsts
+    .filter((entry) => entry !== null)
+    .sort((a, b) => a.sentAt - b.sentAt || a.id - b.id);
+
+  return first?.id ?? null;
+}
+
+async function loadMessages(
+  ids: number[],
+  gameId: number,
+  adkatsServerIds: Set<number>
+): Promise<ChatMessage[]> {
+  if (ids.length === 0) {
     return [];
   }
 
-  const safeLimit = Math.max(1, Math.min(12, Math.floor(input.limit)));
-  const scope = buildServerScopeCondition("cl.ServerID", input);
-  const pool = getDbPool();
-  const suggestions: ChatSearchSuggestion[] = [];
-  const seen = new Set<string>();
-  const dateRange = resolveChatDateRange(query);
-
-  if (dateRange) {
-    addSuggestion(
-      suggestions,
-      seen,
-      {
-        kind: "date",
-        value: query,
-        label: "Date range",
-        detail: `${formatSiteTime(dateRange.low)} - ${formatSiteTime(dateRange.high)}`
-      },
-      safeLimit
-    );
-  }
-
-  const pattern = containsPattern(query);
-  const playerParams: Array<string | number> = [
-    ...scope.params,
-    pattern,
-    safeLimit
-  ];
-  const messageParams: Array<string | number> = [
-    ...scope.params,
-    pattern,
-    safeLimit
-  ];
-
-  const [playerRows, messageRows] = await Promise.all([
-    pool.query<ChatSuggestionRow[]>(
-      `
-        SELECT
-          cl.logSoldierName AS value,
-          MAX(cl.logDate) AS lastSeen
-        FROM tbl_chatlog cl
-        WHERE ${scope.sql}
-          AND ${searchableText("cl.logSoldierName")} LIKE ?
-        GROUP BY cl.logSoldierName
-        ORDER BY MAX(cl.logDate) DESC, cl.logSoldierName ASC
-        LIMIT ?
-      `,
-      playerParams
-    ),
-    pool.query<ChatSuggestionRow[]>(
-      `
-        SELECT
-          TRIM(cl.logMessage) AS value,
-          MAX(cl.logDate) AS lastSeen
-        FROM tbl_chatlog cl
-        WHERE ${scope.sql}
-          AND TRIM(cl.logMessage) != ''
-          AND ${searchableText("cl.logMessage")} LIKE ?
-        GROUP BY TRIM(cl.logMessage)
-        ORDER BY MAX(cl.logDate) DESC
-        LIMIT ?
-      `,
-      messageParams
-    )
-  ]);
-
-  for (const row of playerRows[0]) {
-    if (!row.value) {
-      continue;
-    }
-
-    const lastSeen = fromLoggerTime(row.lastSeen);
-    addSuggestion(
-      suggestions,
-      seen,
-      {
-        kind: "player",
-        value: row.value,
-        label: row.value,
-        detail: lastSeen ? `Last chat ${formatSiteTime(lastSeen)}` : null
-      },
-      safeLimit
-    );
-  }
-
-  for (const row of messageRows[0]) {
-    if (!row.value) {
-      continue;
-    }
-
-    const lastSeen = fromLoggerTime(row.lastSeen);
-    addSuggestion(
-      suggestions,
-      seen,
-      {
-        kind: "message",
-        value: row.value,
-        label: row.value,
-        detail: lastSeen ? `Seen ${formatSiteTime(lastSeen)}` : null
-      },
-      safeLimit
-    );
-  }
-
-  return suggestions;
-}
-
-function chatOrderBy(sort: ChatSort, order: ChatOrder): string {
-  const orderSql = order.toUpperCase();
-  if (sort === "date") {
-    return `cl.logDate ${orderSql}, cl.ID ${orderSql}`;
-  }
-
-  return `${SORT_SQL[sort]} ${orderSql}, cl.logDate DESC, cl.ID DESC`;
-}
-
-export async function getServerChatLog(
-  input: ChatQueryInput
-): Promise<ChatLogResult> {
-  const pool = getDbPool();
-  const sort = normalizeSort(input.sort);
-  const order = normalizeOrder(input.order);
-  let page = normalizePage(input.page);
-  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
-  const query = normalizeQuery(input.query);
-  const dateRange = resolveChatDateRange(query);
-  const scope = buildServerScopeCondition("cl.ServerID", input);
-  const orderBySql = chatOrderBy(sort, order);
-
-  const filterParams: Array<string | number> = [...scope.params];
-  let filterSql = `WHERE ${scope.sql}`;
-
-  if (dateRange) {
-    // Chat times are on the stats logger's clock.
-    filterSql += " AND cl.logDate BETWEEN ? AND ? ";
-    filterParams.push(toLoggerTime(dateRange.low), toLoggerTime(dateRange.high));
-  } else if (query) {
-    filterSql += `
-      AND (
-        ${searchableText("cl.logSoldierName")} LIKE ?
-        OR ${searchableText("cl.logMessage")} LIKE ?
-      )
-    `;
-    const pattern = containsPattern(query);
-    filterParams.push(pattern, pattern);
-  }
-
-  const fetchPageRows = async (targetPage: number) => {
-    const [rows] = await pool.query<ChatPageIdRow[]>(
-      `
-        SELECT cl.ID AS id
-        FROM tbl_chatlog cl
-        ${filterSql}
-        ORDER BY ${orderBySql}
-        LIMIT ? OFFSET ?
-      `,
-      [...filterParams, pageSize + 1, (targetPage - 1) * pageSize]
-    );
-    return rows;
-  };
-
-  let pageRows = await fetchPageRows(page);
-  if (pageRows.length === 0 && page > 1) {
-    // A page past the end shows the last page.
-    const [countRows] = await pool.query<ChatCountRow[]>(
-      `
-        SELECT COUNT(*) AS totalRows
-        FROM tbl_chatlog cl
-        ${filterSql}
-      `,
-      filterParams
-    );
-    const lastPage = Math.max(
-      1,
-      Math.ceil(Number(countRows[0]?.totalRows ?? 0) / pageSize)
-    );
-    if (lastPage < page) {
-      page = lastPage;
-      pageRows = await fetchPageRows(page);
-    }
-  }
-
-  const hasNextPage = pageRows.length > pageSize;
-  const pageIds = pageRows.slice(0, pageSize).map((row) => Number(row.id));
-
-  if (pageIds.length === 0) {
-    return {
-      entries: [],
-      totalRows: null,
-      totalPages: null,
-      page,
-      pageSize,
-      hasNextPage: false,
-      dateRange
-    };
-  }
-
-  const [adkatsAvailable, loggedPlayerIdAvailable] = await Promise.all([
+  const [adkatsBansAvailable, loggedPlayerIdAvailable] = await Promise.all([
     hasTable("adkats_bans"),
     hasColumn("tbl_chatlog", "logPlayerID")
   ]);
-  const idPlaceholders = pageIds.map(() => "?").join(", ");
-  const orderedIdPlaceholders = pageIds.map(() => "?").join(", ");
-  const logParams: Array<string | number> = [
-    input.gameId,
-    ...pageIds,
-    input.gameId,
-    ...pageIds
-  ];
-  // tbl_chatlog.logPlayerID exists only with AdKats and is NULL for server
-  // messages and for chat sent before a player's first stats upload; such lines
-  // match the speaker by name, and lines without any player are kept.
   const namedPlayerIdSql = `(
     SELECT MIN(p.PlayerID)
     FROM tbl_playerdata p
     WHERE p.GameID = ?
       AND p.SoldierName = cl.logSoldierName
   )`;
-  const [rows] = await pool.query<ChatRow[]>(
+  const [rows] = await getDbPool().query<ChatRow[]>(
     `
       SELECT
         chat.id,
@@ -586,7 +339,7 @@ export async function getServerChatLog(
         chat.message,
         chat.subset,
         tpd.PlayerID AS playerId
-      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
+        ${adkatsBansAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM (
         SELECT
           cl.ID AS id,
@@ -601,39 +354,99 @@ export async function getServerChatLog(
               : namedPlayerIdSql
           } AS playerId
         FROM tbl_chatlog cl
-        WHERE cl.ID IN (${idPlaceholders})
+        WHERE cl.ID IN (${ids.map(() => "?").join(", ")})
       ) chat
       LEFT JOIN tbl_server ts ON ts.ServerID = chat.serverId
       LEFT JOIN tbl_playerdata tpd ON tpd.PlayerID = chat.playerId AND tpd.GameID = ?
-      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-      ORDER BY FIELD(chat.id, ${orderedIdPlaceholders})
+      ${adkatsBansAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
+      ORDER BY chat.id DESC
     `,
-    logParams
+    [gameId, ...ids, gameId]
   );
 
-  return {
-    entries: rows.map((row) => ({
+  return rows.map((row) => {
+    const serverId = Number(row.serverId);
+
+    return {
       id: Number(row.id),
-      serverId: Number(row.serverId),
+      serverId,
       serverName: row.serverName ?? null,
-      logDate: fromLoggerTime(row.logDate),
-      soldierName: row.soldierName ?? "",
-      countryCode: row.countryCode ?? null,
-      message: row.message,
-      subset: row.subset ?? null,
+      sentAt: chatLogInstant(row.logDate, adkatsServerIds.has(serverId)),
+      speaker: row.soldierName ?? "",
       playerId: row.playerId === null ? null : Number(row.playerId),
+      countryCode: row.countryCode ?? null,
       banStatus:
         row.banStatus === "Active"
           ? "active"
           : row.banStatus === "Expired"
             ? "expired"
-            : null
-    })),
-    totalRows: null,
-    totalPages: null,
-    page,
-    pageSize,
-    hasNextPage,
-    dateRange
+            : null,
+      subset: row.subset ?? null,
+      text: row.message ?? ""
+    };
+  });
+}
+
+export async function getChatLog(input: ChatLogInput): Promise<ChatLog> {
+  const latestLoggedId = await readLatestLoggedId();
+  const player =
+    input.playerId === null ? null : await getChatPlayer(input.playerId, input.gameId);
+  if (input.playerId !== null && !player) {
+    return { player: null, messages: [], hasOlder: false, hasNewer: false, latestLoggedId };
+  }
+
+  const size = Math.max(1, Math.min(MAX_CHAT_WINDOW_SIZE, Math.floor(input.size)));
+  const [filter, adkatsServerIds] = await Promise.all([
+    messageFilter(input, player),
+    listAdkatsChatServerIds(input.serverIds)
+  ]);
+  const position = input.position;
+  let chatWindow = EMPTY_WINDOW;
+
+  switch (position.kind) {
+    case "latest":
+      chatWindow = await selectLatestWindow(filter, size);
+      break;
+    case "before":
+      chatWindow = await selectWindowBefore(filter, position.messageId, size);
+      break;
+    case "after": {
+      const ids = await selectMessageIds(
+        filter,
+        { sql: "cl.ID > ?", params: [position.messageId] },
+        "ASC",
+        size + 1
+      );
+      chatWindow = {
+        ids: ids.slice(0, size).reverse(),
+        hasOlder: position.messageId > 0,
+        hasNewer: ids.length > size
+      };
+      break;
+    }
+    case "around":
+      chatWindow = await selectWindowAround(filter, position.messageId, size);
+      break;
+    case "until": {
+      const sinceId = await firstMessageIdSince(
+        filter,
+        position.end,
+        input.serverIds,
+        adkatsServerIds
+      );
+      chatWindow =
+        sinceId === null
+          ? await selectLatestWindow(filter, size)
+          : await selectWindowBefore(filter, sinceId, size);
+      break;
+    }
+  }
+
+  return {
+    player,
+    messages: await loadMessages(chatWindow.ids, input.gameId, adkatsServerIds),
+    hasOlder: chatWindow.hasOlder,
+    hasNewer: chatWindow.hasNewer,
+    latestLoggedId
   };
 }

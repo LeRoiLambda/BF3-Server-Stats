@@ -14,6 +14,7 @@ import {
   scopeServers,
   type PageScope
 } from "@/src/server/routing/server-pages";
+import { siteTimeZone, siteTimeZoneCity } from "@/src/server/utils/site-time";
 
 type ServerInfoSectionProps = {
   scope: PageScope;
@@ -25,7 +26,7 @@ export async function ServerInfoSection({ scope }: ServerInfoSectionProps) {
   const [stats, recentRounds, dailyTrend] = await Promise.all([
     getServerDetailStats(servers),
     listRecentServerRounds(servers, 15),
-    listServerDailyPlayerTrend(servers, 14)
+    listServerDailyPlayerTrend(servers, 14, siteTimeZone())
   ]);
 
   return (
@@ -109,7 +110,7 @@ export async function ServerInfoSection({ scope }: ServerInfoSectionProps) {
         </>
       )}
 
-      <DailyPlayerTrendChart data={dailyTrend} />
+      <DailyPlayerTrendChart data={dailyTrend} zoneCity={siteTimeZoneCity()} />
 
       <section className={`mt-6 ${ui.panel}`}>
         <h2 className={`mb-3 ${ui.sectionTitle}`}>Recent Rounds</h2>

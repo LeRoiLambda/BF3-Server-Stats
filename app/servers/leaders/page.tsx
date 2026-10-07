@@ -5,10 +5,7 @@ import {
 } from "@/src/server/routing/server-pages";
 
 export default async function AllServersLeadersPage({ searchParams }: AllServersPageProps) {
-  return (
-    <LeadersSection
-      scope={await getAllServersPageScope("leaders")}
-      searchParams={(await searchParams) ?? {}}
-    />
-  );
+  const query = (await searchParams) ?? {};
+
+  return <LeadersSection scope={await getAllServersPageScope("leaders", query)} searchParams={query} />;
 }

@@ -1,193 +1,162 @@
-import Link from "next/link";
-import { ChatAutoRefresh } from "@/components/chat/chat-auto-refresh";
-import { ChatSearchForm } from "@/components/chat/chat-search-form";
+import { ChatFilters } from "@/components/chat/chat-filters";
+import { chatQuery } from "@/components/chat/chat-href";
+import { formatChatDay, toChatMessageView } from "@/components/chat/chat-message-view";
+import { ChatTranscript } from "@/components/chat/chat-transcript";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
-import { DateTime } from "@/components/stats/date-time";
-import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
-import { StatsPager } from "@/components/stats/pager";
+import { ui } from "@/components/layout/stats-ui";
+import { getChatLog } from "@/src/server/repositories/chat-repository";
 import {
-  PlayerIdentity,
-  PlayerTableCellLink,
-  playerTableRowClass
-} from "@/components/stats/player-link";
-import { SubsetBadge } from "@/components/stats/subset-badge";
-import {
-  getServerChatLog,
-  parseChatOrder,
-  parseChatPage,
-  parseChatSort,
-  type ChatSort
-} from "@/src/server/repositories/chat-repository";
+  CHAT_PAGE_SIZE,
+  chatFilterQuery,
+  readChatParams,
+  type ChatParams,
+  type ChatPosition
+} from "@/src/server/routing/chat-params";
 import { firstValue } from "@/src/server/routing/params";
 import {
-  nextOrder,
   scopeHref,
   scopeName,
   scopeServerId,
-  scopeServers,
   type PageScope,
   type SearchParams
 } from "@/src/server/routing/server-pages";
+import { siteTimeZone, siteTimeZoneCity } from "@/src/server/utils/site-time";
+import { dateInZone, formatSqlDate, wallClockInTimeZone } from "@/src/server/utils/time-zones";
 
 type ChatSectionProps = {
   scope: PageScope;
   searchParams: SearchParams;
 };
 
-const SORT_LABELS: Record<ChatSort, string> = {
-  date: "Date",
-  soldierName: "Player",
-  message: "Message"
-};
+function positionKey(position: ChatPosition): string {
+  switch (position.kind) {
+    case "latest":
+      return position.kind;
+    case "until":
+      return `until:${position.end.toISOString()}`;
+    default:
+      return `${position.kind}:${position.messageId}`;
+  }
+}
+
+function isMidnight(end: Date, timeZone: string): boolean {
+  const wall = wallClockInTimeZone(end, timeZone);
+  return wall.hour === 0 && wall.minute === 0 && wall.second === 0;
+}
+
+function untilLabel(end: Date, timeZone: string): string {
+  if (isMidnight(end, timeZone)) {
+    return `up to the end of ${formatChatDay(dateInZone(new Date(end.getTime() - 1), timeZone))}`;
+  }
+
+  const wall = wallClockInTimeZone(end, timeZone);
+  const clock = `${String(wall.hour).padStart(2, "0")}:${String(wall.minute).padStart(2, "0")}`;
+  return `before ${clock} on ${formatChatDay(formatSqlDate(wall))}`;
+}
+
+function jumpFields(params: ChatParams, timeZone: string): { date: string; hour: string } {
+  if (params.position.kind !== "until") {
+    return { date: params.jump.date, hour: params.jump.hour };
+  }
+
+  const last = wallClockInTimeZone(new Date(params.position.end.getTime() - 1), timeZone);
+  return {
+    date: formatSqlDate(last),
+    hour: isMidnight(params.position.end, timeZone) ? "" : String(last.hour)
+  };
+}
+
+function emptyLabel(params: ChatParams, filtered: boolean, timeZone: string): string {
+  const matching = filtered ? "matching " : "";
+
+  switch (params.position.kind) {
+    case "before":
+      return `No earlier ${matching}messages.`;
+    case "after":
+      return `No newer ${matching}messages yet.`;
+    case "until":
+      return `No ${matching}messages ${untilLabel(params.position.end, timeZone)}.`;
+    default:
+      return filtered ? "No messages match these filters." : "No chat messages yet.";
+  }
+}
+
+function positionLabel(params: ChatParams, timeZone: string): string | null {
+  switch (params.position.kind) {
+    case "latest":
+      return null;
+    case "until":
+      return `Messages ${untilLabel(params.position.end, timeZone)}`;
+    case "around":
+      return "A message in its conversation";
+    default:
+      return "Earlier messages";
+  }
+}
 
 export async function ChatSection({ scope, searchParams }: ChatSectionProps) {
-  const sort = parseChatSort(firstValue(searchParams.sort));
-  const order = parseChatOrder(firstValue(searchParams.order));
-  const page = parseChatPage(firstValue(searchParams.page));
-  const query = firstValue(searchParams.q)?.trim() || null;
+  const timeZone = siteTimeZone();
+  const params = readChatParams((name) => firstValue(searchParams[name]), timeZone);
   const serverId = scopeServerId(scope);
-  const showServer = scope.kind === "all";
-  const result = await getServerChatLog({
-    ...scopeServers(scope),
+  const log = await getChatLog({
+    serverIds: scope.kind === "all" ? scope.serverIds : [scope.server.serverId],
     gameId: scope.gameId,
-    sort,
-    order,
-    page,
-    pageSize: 20,
-    query
+    terms: params.terms,
+    playerId: params.playerId,
+    channel: params.channel,
+    position: params.position,
+    size: CHAT_PAGE_SIZE
   });
-
-  function sortHeading(sortKey: ChatSort) {
-    return (
-      <Link
-        href={scopeHref(scope, "chat", {
-          sort: sortKey,
-          order: nextOrder(sort, sortKey, order, sortKey === "date" ? "desc" : "asc"),
-          q: query
-        })}
-        className={sortableHeadingClass(sort === sortKey)}
-      >
-        {SORT_LABELS[sortKey]}
-        {sort === sortKey ? (order === "asc" ? "↑" : "↓") : null}
-      </Link>
-    );
-  }
+  const viewScope = { showServer: scope.kind === "all", serverId };
+  const filtered = params.terms.length > 0 || params.playerId !== null || params.channel !== null;
+  const filterValues = chatFilterQuery(params);
+  const filterQuery = chatQuery(filterValues);
+  const pagePath = scopeHref(scope, "chat");
 
   return (
     <StatsShell
       title={`${scopeName(scope)} - Chat`}
       subtitle={
         scope.kind === "all"
-          ? "Browse recent chat messages and search by player or keyword across all servers."
-          : "Browse recent chat messages and search by player or keyword."
+          ? "The chat of every server as it happens. Search it, follow one player or channel, or jump to any moment."
+          : "The server's chat as it happens. Search it, follow one player or channel, or jump to any moment."
       }
       servers={scope.context.servers}
       currentServerId={serverId}
       activeSection="chat"
     >
       <section className={ui.panel}>
-        <ChatAutoRefresh intervalMs={60000} />
-        <ChatSearchForm
-          basePath={scopeHref(scope, "chat")}
-          clearHref={scopeHref(scope, "chat")}
-          defaultValue={query ?? ""}
-          sort={sort}
-          order={order}
-          serverId={serverId}
+        <ChatFilters
+          params={params}
+          player={log.player}
+          today={dateInZone(new Date(), timeZone)}
+          jump={jumpFields(params, timeZone)}
+          pagePath={pagePath}
+          filterValues={filterValues}
+          filterQuery={filterQuery}
         />
-
-        {result.dateRange ? (
-          <p className="mb-3 text-xs text-slate-300">
-            Date range: <DateTime value={result.dateRange.low} /> -{" "}
-            <DateTime value={result.dateRange.high} />
-          </p>
-        ) : null}
-
-        <div className={ui.tableShell}>
-          <table className={ui.table}>
-            <thead className={ui.tableHead}>
-              <tr>
-                <th className={ui.th}>#</th>
-                <th className={ui.th}>{sortHeading("date")}</th>
-                <th className={ui.th}>{sortHeading("soldierName")}</th>
-                {showServer ? <th className={ui.th}>Server</th> : null}
-                <th className={ui.th}>Subset</th>
-                <th className={ui.th}>{sortHeading("message")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.entries.length === 0 ? (
-                <tr className={ui.tableRow}>
-                  <td className={ui.emptyCell} colSpan={showServer ? 6 : 5}>
-                    No chat entries found.
-                  </td>
-                </tr>
-              ) : (
-                result.entries.map((entry, index) => (
-                  <tr
-                    key={entry.id}
-                    className={playerTableRowClass(ui.tableRow, entry.playerId !== null)}
-                  >
-                    <td className={ui.td}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        {(result.page - 1) * result.pageSize + index + 1}
-                      </PlayerTableCellLink>
-                    </td>
-                    <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        <DateTime value={entry.logDate} />
-                      </PlayerTableCellLink>
-                    </td>
-                    <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerTableCellLink
-                        playerId={entry.playerId}
-                        serverId={serverId}
-                        primary
-                      >
-                        <PlayerIdentity
-                          soldierName={entry.soldierName}
-                          countryCode={entry.countryCode}
-                        />
-                        <PlayerDisciplineBadge status={entry.banStatus} density="compact" />
-                      </PlayerTableCellLink>
-                    </td>
-                    {showServer ? (
-                      <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                        <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                          {entry.serverName ?? `Server #${entry.serverId}`}
-                        </PlayerTableCellLink>
-                      </td>
-                    ) : null}
-                    <td className={`${ui.td} whitespace-nowrap text-slate-300`}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        <SubsetBadge subset={entry.subset} />
-                      </PlayerTableCellLink>
-                    </td>
-                    <td className={`${ui.td} text-slate-300`}>
-                      <PlayerTableCellLink playerId={entry.playerId} serverId={serverId}>
-                        {entry.message}
-                      </PlayerTableCellLink>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <StatsPager
-          page={result.page}
-          totalPages={result.totalPages}
-          hasNextPage={result.hasNextPage}
-          getPageHref={(targetPage) =>
-            scopeHref(scope, "chat", {
-              sort,
-              order,
-              q: query,
-              page: targetPage > 1 ? targetPage : null
-            })
-          }
+        <ChatTranscript
+          key={`${filterQuery}|${positionKey(params.position)}`}
+          initial={{
+            messages: log.messages.map((message) =>
+              toChatMessageView(message, viewScope, timeZone)
+            ),
+            hasOlder: log.hasOlder,
+            hasNewer: log.hasNewer,
+            latestLoggedId: log.latestLoggedId
+          }}
+          anchorId={params.position.kind === "around" ? params.position.messageId : null}
+          positionLabel={positionLabel(params, timeZone)}
+          terms={params.terms}
+          pagePath={pagePath}
+          filterQuery={filterQuery}
+          apiQuery={chatQuery({
+            ...filterValues,
+            sid: serverId === null ? null : String(serverId)
+          })}
+          filtered={filtered}
+          emptyLabel={emptyLabel(params, filtered, timeZone)}
+          zoneCity={siteTimeZoneCity()}
         />
       </section>
     </StatsShell>

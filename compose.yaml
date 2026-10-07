@@ -1,6 +1,3 @@
-# Development stack: MariaDB loaded with the sample database from sample-db/,
-# and the app built from this repository. The database lives in memory and is
-# loaded again on every start, with dates relative to that start.
 services:
   db:
     image: mariadb:10.11

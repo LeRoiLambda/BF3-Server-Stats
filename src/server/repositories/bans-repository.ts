@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 import { parseUtcDateTime } from "@/src/server/utils/time-zones";
@@ -55,7 +56,7 @@ type CountRow = RowDataPacket & {
 const SORT_SQL: Record<BanSort, string> = {
   date: "MAX(adk.ban_startTime)",
   soldierName: "tpd.SoldierName",
-  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
+  kdr: `COALESCE(${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")}, 0)`,
   hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)"
 };
 
@@ -116,7 +117,6 @@ function toBannedPlayer(row: BannedRow): BannedPlayer {
     countryCode: row.countryCode,
     kdr: toFixedNumber(row.kdr),
     hsr: toFixedNumber(row.hsr),
-    // AdKats writes ban times in UTC.
     bannedAt: parseUtcDateTime(row.bannedAt),
     reason: row.reason ? row.reason : null
   };
@@ -175,7 +175,7 @@ export async function getBannedPlayers(
         tpd.PlayerID AS playerId,
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
-        (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
+        ${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")} AS kdr,
         ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr,
         MAX(adk.ban_startTime) AS bannedAt
         ${adkatsRecordsAvailable ? ", abr.record_message AS reason" : ""}

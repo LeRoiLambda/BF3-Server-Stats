@@ -1,7 +1,10 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
-import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
+import {
+  buildServerScopeCondition,
+  type ServerScopeCondition
+} from "@/src/server/repositories/server-scope";
 import { parseUtcDateTime } from "@/src/server/utils/time-zones";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
@@ -75,8 +78,6 @@ export type PlayerModerationSummary = {
   recentActions: ModerationAction[];
 };
 
-// activeServerIds are the servers the site lists; AdKats settings come only
-// from those.
 export type PlayerModerationInput = {
   playerId: number;
   serverId: number | null;
@@ -298,6 +299,13 @@ function placeholders(count: number): string {
   return Array.from({ length: count }, () => "?").join(", ");
 }
 
+function recordServerScope(input: PlayerModerationInput): ServerScopeCondition {
+  return buildServerScopeCondition(
+    "r.server_id",
+    input.serverId === null ? { serverIds: input.activeServerIds } : { serverId: input.serverId }
+  );
+}
+
 async function getCurrentStatus(
   playerId: number,
   availability: ModerationAvailability
@@ -360,7 +368,6 @@ async function getCurrentStatus(
 
   const detail = row.recordMessage || row.banNotes || null;
   const banDuration = banDurationFromRow(row);
-  // AdKats writes ban times in UTC.
   if (row.banStatus === "Active") {
     return {
       kind: "activeBan",
@@ -400,7 +407,6 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
   }
 
   const durationMinutes = Number(row.commandNumeric ?? 0);
-  // AdKats writes record_time in UTC.
   const startedAt = parseUtcDateTime(row.recordTime);
   if (!startedAt || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     return DEFAULT_MUTE_STATUS;
@@ -445,8 +451,7 @@ async function getCurrentMuteStatus(
   }
 
   const pool = getDbPool();
-  const serverCondition = input.serverId === null ? "" : "AND r.server_id = ?";
-  const serverParams = input.serverId === null ? [] : [input.serverId];
+  const scope = recordServerScope(input);
 
   if (availability.commands) {
     const [rows] = await pool.query<RecordRow[]>(
@@ -466,7 +471,7 @@ async function getCurrentMuteStatus(
         FROM adkats_records_main r
         LEFT JOIN adkats_commands action_cmd ON action_cmd.command_id = r.command_action
         WHERE r.target_id = ?
-          ${serverCondition}
+          AND ${scope.sql}
           AND (r.source_id IS NULL OR r.source_id <> r.target_id)
           AND (
             action_cmd.command_text IN ('mute', 'unmute')
@@ -475,7 +480,7 @@ async function getCurrentMuteStatus(
         ORDER BY r.record_time DESC, r.record_id DESC
         LIMIT 1
       `,
-      [input.playerId, ...serverParams]
+      [input.playerId, ...scope.params]
     );
 
     return buildMuteStatus(rows[0]);
@@ -495,20 +500,19 @@ async function getCurrentMuteStatus(
         r.record_time AS recordTime
       FROM adkats_records_main r
       WHERE r.target_id = ?
-        ${serverCondition}
+        AND ${scope.sql}
         AND (r.source_id IS NULL OR r.source_id <> r.target_id)
         AND r.command_action IN (11, 146)
       ORDER BY r.record_time DESC, r.record_id DESC
       LIMIT 1
     `,
-    [input.playerId, ...serverParams]
+    [input.playerId, ...scope.params]
   );
 
   return buildMuteStatus(rows[0]);
 }
 
 async function listSettingsRows(
-  serverId: number | null,
   activeServerIds: number[],
   availability: ModerationAvailability
 ): Promise<SettingRow[]> {
@@ -517,27 +521,6 @@ async function listSettingsRows(
   }
 
   const pool = getDbPool();
-  const namesSql = placeholders(SETTING_NAMES.length);
-  if (serverId !== null) {
-    const [serverRows] = await pool.query<SettingRow[]>(
-      `
-        SELECT
-          server_id AS serverId,
-          setting_name AS settingName,
-          setting_value AS settingValue
-        FROM adkats_settings
-        WHERE server_id = ?
-          AND setting_name IN (${namesSql})
-        ORDER BY setting_name
-      `,
-      [serverId, ...SETTING_NAMES]
-    );
-
-    if (serverRows.length > 0) {
-      return serverRows;
-    }
-  }
-
   const scope = buildServerScopeCondition("server_id", {
     serverIds: activeServerIds
   });
@@ -549,7 +532,7 @@ async function listSettingsRows(
         setting_value AS settingValue
       FROM adkats_settings
       WHERE ${scope.sql}
-        AND setting_name IN (${namesSql})
+        AND setting_name IN (${placeholders(SETTING_NAMES.length)})
       ORDER BY server_id ASC, setting_name ASC
     `,
     [...scope.params, ...SETTING_NAMES]
@@ -686,8 +669,7 @@ function buildLadder(
     return null;
   }
 
-  // As in AdKats: a negative total counts as zero, and totals past the end of
-  // the ladder stay on the last step.
+  // As in AdKats: negative totals count as zero, and totals past the ladder's end stay on its last step.
   const nextIndex =
     key === "punishment" && totalPoints !== null
       ? Math.min(Math.max(Math.floor(totalPoints), 0), tokens.length - 1)
@@ -930,8 +912,7 @@ async function listRecentActions(
 
   const pool = getDbPool();
   const limit = Math.max(1, Math.min(20, Math.floor(input.recentLimit ?? 8)));
-  const serverCondition = input.serverId === null ? "" : "AND r.server_id = ?";
-  const serverParams = input.serverId === null ? [] : [input.serverId];
+  const scope = recordServerScope(input);
 
   if (availability.commands) {
     const textSql = placeholders(MODERATION_COMMAND_TEXTS.length);
@@ -963,7 +944,7 @@ async function listRecentActions(
         LEFT JOIN adkats_commands type_cmd ON type_cmd.command_id = r.command_type
         LEFT JOIN adkats_commands action_cmd ON action_cmd.command_id = r.command_action
         WHERE r.target_id = ?
-          ${serverCondition}
+          AND ${scope.sql}
           AND (r.source_id IS NULL OR r.source_id <> r.target_id)
           AND (
             LOWER(type_cmd.command_text) IN (${textSql})
@@ -976,7 +957,7 @@ async function listRecentActions(
       `,
       [
         input.playerId,
-        ...serverParams,
+        ...scope.params,
         ...MODERATION_COMMAND_TEXTS,
         ...MODERATION_COMMAND_TEXTS,
         ...MODERATION_COMMAND_KEY_PATTERNS,
@@ -1003,7 +984,7 @@ async function listRecentActions(
         r.record_time AS recordTime
       FROM adkats_records_main r
       WHERE r.target_id = ?
-        ${serverCondition}
+        AND ${scope.sql}
         AND (r.source_id IS NULL OR r.source_id <> r.target_id)
         AND (
           r.command_type IN (${idSql})
@@ -1014,7 +995,7 @@ async function listRecentActions(
     `,
     [
       input.playerId,
-      ...serverParams,
+      ...scope.params,
       ...MODERATION_COMMAND_IDS,
       ...MODERATION_COMMAND_IDS,
       limit
@@ -1066,7 +1047,7 @@ export async function getPlayerModerationSummary(
   const [currentStatus, muteStatus, settingsRows] = await Promise.all([
     getCurrentStatus(input.playerId, availability),
     getCurrentMuteStatus(input, availability),
-    listSettingsRows(input.serverId, input.activeServerIds, availability)
+    listSettingsRows(input.activeServerIds, availability)
   ]);
   const initialSettings = parseSettings(settingsRows, input.serverId, null);
   const points = await getInfractionPoints(
@@ -1101,11 +1082,7 @@ export async function getModerationPolicy(
     };
   }
 
-  const settingsRows = await listSettingsRows(
-    input.serverId,
-    input.activeServerIds,
-    availability
-  );
+  const settingsRows = await listSettingsRows(input.activeServerIds, availability);
   const settings = parseSettings(settingsRows, input.serverId, null);
 
   return {

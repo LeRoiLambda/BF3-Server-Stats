@@ -1,6 +1,7 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
 import { normalizeCountryCode } from "@/src/server/domain/bf3-reference";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toFixedNumber } from "@/src/server/utils/numbers";
@@ -62,6 +63,7 @@ export async function listServerCountryBreakdown(
 ): Promise<CountryBreakdown[]> {
   const pool = getDbPool();
   const scope = buildServerScopeCondition("tsp.ServerID", input);
+  // "--" and GeoIP pseudo-codes such as "A1" name no country.
   const [rows] = await pool.query<CountryBreakdownRow[]>(
     `
       SELECT
@@ -72,8 +74,7 @@ export async function listServerCountryBreakdown(
       INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
       WHERE ${scope.sql}
         AND tpd.GameID = ?
-        AND tpd.CountryCode != '--'
-        AND tpd.CountryCode != ''
+        AND tpd.CountryCode REGEXP '^[A-Za-z]{2}$'
       GROUP BY tpd.CountryCode
       ORDER BY playerCount DESC, tpd.CountryCode ASC
       LIMIT 20
@@ -132,7 +133,7 @@ async function listServerPlayersByCountry(
         UPPER(tpd.CountryCode) AS countryCode,
         SUM(tps.Score) AS score,
         SUM(tps.Kills) AS kills,
-        (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr
+        ${perAtLeastOneSql("SUM(tps.Kills)", "SUM(tps.Deaths)")} AS kdr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_playerstats tps
       INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID

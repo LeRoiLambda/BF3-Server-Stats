@@ -7,11 +7,10 @@ import { getServerContext } from "@/src/server/repositories/server-repository";
 export default async function NotFound() {
   const context = await getServerContext();
 
-  // With no active servers every stats page 404s; /servers explains why.
   if (context.servers.length === 0) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-16 sm:px-8">
-        <section className="stats-panel rounded-sm p-6">
+      <main className="mx-auto max-w-3xl py-16 sm:px-8">
+        <section className="stats-panel px-3 py-6 sm:p-6">
           <p className={ui.sectionTitle}>404</p>
           <h1 className="mt-3 text-2xl font-semibold leading-tight text-slate-50">
             Nothing to show here.
@@ -34,7 +33,7 @@ export default async function NotFound() {
       servers={context.servers}
       activeSection="home"
     >
-      <section className="stats-panel min-w-0 rounded-sm p-0">
+      <section className="stats-panel min-w-0 p-0">
         <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 p-5 sm:p-6">
             <p className={ui.sectionTitle}>404</p>

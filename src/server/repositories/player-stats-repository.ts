@@ -1,20 +1,13 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
-import { hasTable, hasTableRows } from "@/src/server/db/schema";
+import { hasServerSessions, hasTable } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
-import {
-  buildServerScopeCondition,
-  type ServerScopeInput
-} from "@/src/server/repositories/server-scope";
+import { perAtLeastOneSql } from "@/src/server/db/ratios";
+import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 import { siteTimeZone } from "@/src/server/utils/site-time";
-import {
-  naiveDateToWallClock,
-  wallClockInTimeZone,
-  wallClockToInstant,
-  wallClockToNaiveDate
-} from "@/src/server/utils/time-zones";
+import { dateInZone, dayStartInZone } from "@/src/server/utils/time-zones";
 
 export type LeaderSort = "soldierName" | "score" | "kills" | "kdr" | "hsr";
 export type SortOrder = "asc" | "desc";
@@ -22,16 +15,6 @@ export type CurrentPlayerSort = "soldierName" | "score" | "kills" | "deaths" | "
 export type CurrentPlayerOrder = "asc" | "desc";
 
 export type LeaderboardQueryInput = {
-  serverId: number;
-  gameId: number;
-  sort: LeaderSort;
-  order: SortOrder;
-  page: number;
-  pageSize: number;
-  search: string | null;
-};
-
-export type AllServersLeaderboardQueryInput = {
   serverIds: number[];
   gameId: number;
   sort: LeaderSort;
@@ -65,6 +48,7 @@ export type WeeklyLeaderboardResult = {
   available: boolean;
   players: LeaderboardPlayer[];
   resetAt: string;
+  serverIdsWithoutSessions: number[];
 };
 
 type PlayerRow = RowDataPacket & {
@@ -106,22 +90,6 @@ export type CurrentPlayer = {
   banStatus: "active" | "expired" | null;
 };
 
-const SORT_SQL: Record<LeaderSort, string> = {
-  soldierName: "tpd.SoldierName",
-  score: "COALESCE(tps.Score, 0)",
-  kills: "COALESCE(tps.Kills, 0)",
-  kdr: "COALESCE((tps.Kills / NULLIF(tps.Deaths, 0)), 0)",
-  hsr: "COALESCE(((tps.Headshots / NULLIF(tps.Kills, 0)) * 100), 0)"
-};
-
-const ALL_SERVERS_SORT_SQL: Record<LeaderSort, string> = {
-  soldierName: "tpd.SoldierName",
-  score: "COALESCE(SUM(tps.Score), 0)",
-  kills: "COALESCE(SUM(tps.Kills), 0)",
-  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
-  hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)"
-};
-
 const CURRENT_PLAYER_SORT_SQL: Record<CurrentPlayerSort, string> = {
   soldierName: "cp.Soldiername",
   score: "cp.Score",
@@ -134,34 +102,17 @@ async function hasAdkatsBansTable(): Promise<boolean> {
   return hasTable("adkats_bans");
 }
 
-// The logger always creates tbl_sessions but only fills it when its "Session
-// ON?" and "Save Sessiondata to DB?" settings are enabled.
-async function hasSessionHistory(): Promise<boolean> {
-  return hasTableRows("tbl_sessions");
-}
-
 function currentWeekWindow(): {
   startSql: string;
   endSql: string;
   resetAt: string;
 } {
   const timeZone = siteTimeZone();
-  const today = wallClockInTimeZone(new Date(), timeZone);
-  const localStart = wallClockToNaiveDate({
-    ...today,
-    hour: 0,
-    minute: 0,
-    second: 0
-  });
-  const daysSinceMonday = (localStart.getUTCDay() + 6) % 7;
-  localStart.setUTCDate(localStart.getUTCDate() - daysSinceMonday);
+  const today = dateInZone(new Date(), timeZone);
+  const daysSinceMonday = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const start = dayStartInZone(today, timeZone, -daysSinceMonday);
+  const end = dayStartInZone(today, timeZone, 7 - daysSinceMonday);
 
-  const localEnd = new Date(localStart);
-  localEnd.setUTCDate(localEnd.getUTCDate() + 7);
-
-  const start = wallClockToInstant(naiveDateToWallClock(localStart), timeZone);
-  const end = wallClockToInstant(naiveDateToWallClock(localEnd), timeZone);
-  // Session start times are on the stats logger's clock.
   return {
     startSql: toLoggerTime(start),
     endSql: toLoggerTime(end),
@@ -247,12 +198,29 @@ export function parseCurrentPlayerOrder(value: string | null): CurrentPlayerOrde
   return normalizeCurrentPlayerOrder(value);
 }
 
-function leaderboardOrderBy(
-  sort: LeaderSort,
-  order: SortOrder,
-  aggregate: boolean
-): string {
-  const sortSql = aggregate ? ALL_SERVERS_SORT_SQL[sort] : SORT_SQL[sort];
+type StatSql = (column: string) => string;
+
+function leaderboardStatSql(aggregate: boolean): StatSql {
+  return aggregate ? (column) => `SUM(tps.${column})` : (column) => `tps.${column}`;
+}
+
+function leaderboardSortSql(sort: LeaderSort, stat: StatSql): string {
+  switch (sort) {
+    case "soldierName":
+      return "tpd.SoldierName";
+    case "score":
+      return `COALESCE(${stat("Score")}, 0)`;
+    case "kills":
+      return `COALESCE(${stat("Kills")}, 0)`;
+    case "kdr":
+      return `COALESCE(${perAtLeastOneSql(stat("Kills"), stat("Deaths"))}, 0)`;
+    case "hsr":
+      return `COALESCE(((${stat("Headshots")} / NULLIF(${stat("Kills")}, 0)) * 100), 0)`;
+  }
+}
+
+function leaderboardOrderBy(sort: LeaderSort, order: SortOrder, stat: StatSql): string {
+  const sortSql = leaderboardSortSql(sort, stat);
   const orderSql = order.toUpperCase();
 
   if (sort === "soldierName") {
@@ -280,103 +248,18 @@ function toLeaderboardPlayer(row: PlayerRow): LeaderboardPlayer {
   };
 }
 
-export async function getServerLeaderboard(
-  input: LeaderboardQueryInput
-): Promise<LeaderboardResult> {
-  const pool = getDbPool();
-  const sort = normalizeSort(input.sort);
-  const order = normalizeOrder(input.order);
-  const requestedPage = normalizePage(input.page);
-  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
-  const search = input.search?.trim() ? input.search.trim() : null;
-
-  const countParams: Array<string | number> = [
-    input.serverId,
-    input.gameId
-  ];
-  let countSql = `
-    SELECT COUNT(*) AS totalRows
-    FROM tbl_playerstats tps
-    INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-    INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    WHERE tsp.ServerID = ?
-      AND tpd.GameID = ?
-  `;
-
-  if (search) {
-    countSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    countParams.push(containsPattern(search));
-  }
-
-  const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
-  const totalRows = Number(countRows[0]?.totalRows ?? 0);
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const page = Math.min(requestedPage, totalPages);
-  const offset = (page - 1) * pageSize;
-  const adkatsAvailable = await hasAdkatsBansTable();
-  const leaderParams: Array<string | number | null> = [
-    input.serverId,
-    input.gameId
-  ];
-  let leaderSql = `
-    SELECT
-      tpd.PlayerID AS playerId,
-      tpd.SoldierName AS soldierName,
-      tpd.CountryCode AS countryCode,
-      tps.Score AS score,
-      tps.Kills AS kills,
-      (tps.Kills / NULLIF(tps.Deaths, 0)) AS kdr,
-      ((tps.Headshots / NULLIF(tps.Kills, 0)) * 100) AS hsr
-      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-    FROM tbl_playerstats tps
-    INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-    INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-    WHERE tsp.ServerID = ?
-      AND tpd.GameID = ?
-  `;
-
-  if (search) {
-    leaderSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    leaderParams.push(containsPattern(search));
-  }
-
-  leaderSql += `
-    ORDER BY ${leaderboardOrderBy(sort, order, false)}
-    LIMIT ? OFFSET ?
-  `;
-  leaderParams.push(pageSize, offset);
-
-  const [rows] = await pool.query<PlayerRow[]>(leaderSql, leaderParams);
-
-  return {
-    players: rows.map(toLeaderboardPlayer),
-    totalRows,
-    totalPages,
-    page,
-    pageSize,
-    hasNextPage: page < totalPages
-  };
-}
-
-export async function getAllServersLeaderboard(
-  input: AllServersLeaderboardQueryInput
-): Promise<LeaderboardResult> {
+export async function getLeaderboard(input: LeaderboardQueryInput): Promise<LeaderboardResult> {
   const serverIds = Array.from(
-    new Set(
-      input.serverIds
-        .map((serverId) => Number(serverId))
-        .filter((serverId) => Number.isFinite(serverId) && serverId > 0)
-    )
+    new Set(input.serverIds.filter((serverId) => Number.isInteger(serverId) && serverId > 0))
   );
-
+  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   if (serverIds.length === 0) {
     return {
       players: [],
       totalRows: 0,
       totalPages: 1,
       page: 1,
-      pageSize: Math.max(1, Math.min(100, Math.floor(input.pageSize))),
+      pageSize,
       hasNextPage: false
     };
   }
@@ -385,71 +268,65 @@ export async function getAllServersLeaderboard(
   const sort = normalizeSort(input.sort);
   const order = normalizeOrder(input.order);
   const requestedPage = normalizePage(input.page);
-  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   const search = input.search?.trim() ? input.search.trim() : null;
-  const serverPlaceholders = serverIds.map(() => "?").join(", ");
-
-  const countParams: Array<string | number> = [...serverIds, input.gameId];
-  let countSql = `
-    SELECT COUNT(DISTINCT tpd.PlayerID) AS totalRows
+  const aggregate = serverIds.length > 1;
+  const stat = leaderboardStatSql(aggregate);
+  const scope = buildServerScopeCondition("tsp.ServerID", { serverIds });
+  const fromSql = `
     FROM tbl_playerstats tps
     INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
     INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    WHERE tsp.ServerID IN (${serverPlaceholders})
-      AND tpd.GameID = ?
   `;
+  const whereSql = `
+    WHERE ${scope.sql}
+      AND tpd.GameID = ?
+      ${search ? `AND ${searchableText("tpd.SoldierName")} LIKE ?` : ""}
+  `;
+  const whereParams: Array<string | number> = [
+    ...scope.params,
+    input.gameId,
+    ...(search ? [containsPattern(search)] : [])
+  ];
 
-  if (search) {
-    countSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    countParams.push(containsPattern(search));
-  }
-
-  const [countRows] = await pool.query<CountRow[]>(countSql, countParams);
+  const [countRows] = await pool.query<CountRow[]>(
+    `
+      SELECT ${aggregate ? "COUNT(DISTINCT tpd.PlayerID)" : "COUNT(*)"} AS totalRows
+      ${fromSql}
+      ${whereSql}
+    `,
+    whereParams
+  );
   const totalRows = Number(countRows[0]?.totalRows ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const page = Math.min(requestedPage, totalPages);
-  const offset = (page - 1) * pageSize;
-
   const adkatsAvailable = await hasAdkatsBansTable();
-  const leaderParams: Array<string | number | null> = [
-    ...serverIds,
-    input.gameId
-  ];
 
-  let leaderSql = `
-    SELECT
-      tpd.PlayerID AS playerId,
-      tpd.SoldierName AS soldierName,
-      tpd.CountryCode AS countryCode,
-      SUM(tps.Score) AS score,
-      SUM(tps.Kills) AS kills,
-      (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
-      ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr
-      ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-    FROM tbl_playerstats tps
-    INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-    INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
-    ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
-    WHERE tsp.ServerID IN (${serverPlaceholders})
-      AND tpd.GameID = ?
-  `;
-
-  if (search) {
-    leaderSql += ` AND ${searchableText("tpd.SoldierName")} LIKE ? `;
-    leaderParams.push(containsPattern(search));
-  }
-
-  leaderSql += `
-    GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode ${adkatsAvailable ? ", adk.ban_status" : ""}
-  `;
-
-  leaderSql += `
-    ORDER BY ${leaderboardOrderBy(sort, order, true)}
-    LIMIT ? OFFSET ?
-  `;
-  leaderParams.push(pageSize, offset);
-
-  const [rows] = await pool.query<PlayerRow[]>(leaderSql, leaderParams);
+  const [rows] = await pool.query<PlayerRow[]>(
+    `
+      SELECT
+        tpd.PlayerID AS playerId,
+        tpd.SoldierName AS soldierName,
+        tpd.CountryCode AS countryCode,
+        ${stat("Score")} AS score,
+        ${stat("Kills")} AS kills,
+        ${perAtLeastOneSql(stat("Kills"), stat("Deaths"))} AS kdr,
+        ((${stat("Headshots")} / NULLIF(${stat("Kills")}, 0)) * 100) AS hsr
+        ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
+      ${fromSql}
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
+      ${whereSql}
+      ${
+        aggregate
+          ? `GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode${
+              adkatsAvailable ? ", adk.ban_status" : ""
+            }`
+          : ""
+      }
+      ORDER BY ${leaderboardOrderBy(sort, order, stat)}
+      LIMIT ? OFFSET ?
+    `,
+    [...whereParams, pageSize, (page - 1) * pageSize]
+  );
 
   return {
     players: rows.map(toLeaderboardPlayer),
@@ -461,28 +338,31 @@ export async function getAllServersLeaderboard(
   };
 }
 
-async function getWeeklyLeaderboard(
-  scopeInput: ServerScopeInput,
-  gameId: number,
-  limit: number | undefined
-): Promise<WeeklyLeaderboardResult> {
+export async function getWeeklyLeaderboard(input: {
+  serverIds: number[];
+  gameId: number;
+  limit?: number;
+}): Promise<WeeklyLeaderboardResult> {
   const weekWindow = currentWeekWindow();
-  const sessionsAvailable = await hasSessionHistory();
-  if (!sessionsAvailable) {
+  const serverIds = Array.from(
+    new Set(input.serverIds.filter((serverId) => Number.isInteger(serverId) && serverId > 0))
+  );
+  const sessionFlags = await Promise.all(serverIds.map(hasServerSessions));
+  const rankedServerIds = serverIds.filter((_, index) => sessionFlags[index]);
+  const serverIdsWithoutSessions = serverIds.filter((_, index) => !sessionFlags[index]);
+  if (rankedServerIds.length === 0) {
     return {
       available: false,
       players: [],
-      resetAt: weekWindow.resetAt
+      resetAt: weekWindow.resetAt,
+      serverIdsWithoutSessions
     };
   }
 
   const pool = getDbPool();
   const adkatsAvailable = await hasAdkatsBansTable();
-  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit ?? 20)));
-  const scope = buildServerScopeCondition("tsp.ServerID", scopeInput);
-
-  // Completed sessions only: a session row covers a whole visit and is written
-  // when the player leaves.
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 20)));
+  const scope = buildServerScopeCondition("tsp.ServerID", { serverIds: rankedServerIds });
   const [rows] = await pool.query<PlayerRow[]>(
     `
       SELECT
@@ -491,7 +371,7 @@ async function getWeeklyLeaderboard(
         tpd.CountryCode AS countryCode,
         SUM(tss.Score) AS score,
         SUM(tss.Kills) AS kills,
-        (SUM(tss.Kills) / NULLIF(SUM(tss.Deaths), 0)) AS kdr,
+        ${perAtLeastOneSql("SUM(tss.Kills)", "SUM(tss.Deaths)")} AS kdr,
         ((SUM(tss.Headshots) / NULLIF(SUM(tss.Kills), 0)) * 100) AS hsr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_sessions tss
@@ -508,7 +388,7 @@ async function getWeeklyLeaderboard(
     `,
     [
       ...scope.params,
-      gameId,
+      input.gameId,
       weekWindow.startSql,
       weekWindow.endSql,
       safeLimit
@@ -518,43 +398,9 @@ async function getWeeklyLeaderboard(
   return {
     available: true,
     players: rows.map(toLeaderboardPlayer),
-    resetAt: weekWindow.resetAt
+    resetAt: weekWindow.resetAt,
+    serverIdsWithoutSessions
   };
-}
-
-export async function getWeeklyServerLeaderboard(input: {
-  serverId: number;
-  gameId: number;
-  limit?: number;
-}): Promise<WeeklyLeaderboardResult> {
-  return getWeeklyLeaderboard(
-    { serverId: input.serverId },
-    input.gameId,
-    input.limit
-  );
-}
-
-export async function getAllServersWeeklyLeaderboard(input: {
-  serverIds: number[];
-  gameId: number;
-  limit?: number;
-}): Promise<WeeklyLeaderboardResult> {
-  const serverIds = Array.from(
-    new Set(
-      input.serverIds
-        .map((serverId) => Number(serverId))
-        .filter((serverId) => Number.isFinite(serverId) && serverId > 0)
-    )
-  );
-  if (serverIds.length === 0) {
-    return {
-      available: true,
-      players: [],
-      resetAt: currentWeekWindow().resetAt
-    };
-  }
-
-  return getWeeklyLeaderboard({ serverIds }, input.gameId, input.limit);
 }
 
 export async function listCurrentPlayersByServer(input: {
@@ -570,12 +416,10 @@ export async function listCurrentPlayersByServer(input: {
   const orderSql = order.toUpperCase();
   const adkatsAvailable = await hasAdkatsBansTable();
 
-  // Players new to this server have no player or stats rows until the next map
-  // load.
   const [rows] = await pool.query<CurrentPlayerRow[]>(
     `
       SELECT
-        resolved.playerId AS playerId,
+        cp.playerId,
         cp.Soldiername AS soldierName,
         cp.Score AS score,
         cp.Kills AS kills,
@@ -584,23 +428,29 @@ export async function listCurrentPlayersByServer(input: {
         cp.SquadID AS squadId,
         cp.CountryCode AS countryCode
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-      FROM tbl_currentplayers cp
-      LEFT JOIN (
+      FROM (
         SELECT
-          MIN(tpd.PlayerID) AS playerId,
-          tpd.SoldierName AS soldierName
-        FROM tbl_playerdata tpd
-        INNER JOIN tbl_server_player tsp ON tsp.PlayerID = tpd.PlayerID
-        WHERE tpd.GameID = ?
-          AND tsp.ServerID = ?
-        GROUP BY tpd.SoldierName
-      ) resolved ON resolved.soldierName = cp.Soldiername
-      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = resolved.playerId" : ""}
-      WHERE cp.ServerID = ?
+          tcp.Soldiername,
+          tcp.Score,
+          tcp.Kills,
+          tcp.Deaths,
+          tcp.TeamID,
+          tcp.SquadID,
+          tcp.CountryCode,
+          (
+            SELECT MIN(tpd.PlayerID)
+            FROM tbl_playerdata tpd
+            WHERE tpd.GameID = ?
+              AND tpd.SoldierName = tcp.Soldiername
+          ) AS playerId
+        FROM tbl_currentplayers tcp
+        WHERE tcp.ServerID = ?
+      ) cp
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = cp.playerId" : ""}
       ORDER BY cp.TeamID ASC, ${sortExpression} ${orderSql}, cp.Soldiername ASC
       LIMIT 128
     `,
-    [input.gameId, input.serverId, input.serverId]
+    [input.gameId, input.serverId]
   );
 
   return rows.map((row) => ({

@@ -5,10 +5,7 @@ import {
 } from "@/src/server/routing/server-pages";
 
 export default async function AllServersBansPage({ searchParams }: AllServersPageProps) {
-  return (
-    <BansSection
-      scope={await getAllServersPageScope("bans")}
-      searchParams={(await searchParams) ?? {}}
-    />
-  );
+  const query = (await searchParams) ?? {};
+
+  return <BansSection scope={await getAllServersPageScope("bans", query)} searchParams={query} />;
 }

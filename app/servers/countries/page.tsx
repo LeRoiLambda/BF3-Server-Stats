@@ -5,10 +5,7 @@ import {
 } from "@/src/server/routing/server-pages";
 
 export default async function AllServersCountriesPage({ searchParams }: AllServersPageProps) {
-  return (
-    <CountriesSection
-      scope={await getAllServersPageScope("countries")}
-      searchParams={(await searchParams) ?? {}}
-    />
-  );
+  const query = (await searchParams) ?? {};
+
+  return <CountriesSection scope={await getAllServersPageScope("countries", query)} searchParams={query} />;
 }

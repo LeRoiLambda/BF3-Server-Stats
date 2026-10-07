@@ -1,10 +1,8 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 
-// Schema checks are cached for a minute, so optional tables that are added or
-// dropped while the app runs (such as AdKats') are picked up.
+// Cached for a minute, so tables added while the app runs are picked up.
 const SCHEMA_CACHE_TTL_MS = 60_000;
-const IDENTIFIER_PATTERN = /^[A-Za-z0-9_]+$/;
 
 type CachedSchemaFlag = {
   value: boolean;
@@ -84,16 +82,22 @@ export async function hasColumn(
   );
 }
 
-export async function hasTableRows(tableName: string): Promise<boolean> {
-  const normalizedName = tableName.trim();
-  if (!IDENTIFIER_PATTERN.test(normalizedName) || !(await hasTable(normalizedName))) {
+export async function hasServerSessions(serverId: number): Promise<boolean> {
+  if (!(await hasTable("tbl_sessions"))) {
     return false;
   }
 
-  return cachedSchemaFlag(`rows:${normalizedName}`, async () => {
+  return cachedSchemaFlag(`sessions:${serverId}`, async () => {
     const pool = getDbPool();
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT 1 AS present FROM \`${normalizedName}\` LIMIT 1`
+      `
+        SELECT 1 AS present
+        FROM tbl_server_player tsp
+        WHERE tsp.ServerID = ?
+          AND EXISTS (SELECT 1 FROM tbl_sessions tss WHERE tss.StatsID = tsp.StatsID)
+        LIMIT 1
+      `,
+      [serverId]
     );
 
     return rows.length > 0;

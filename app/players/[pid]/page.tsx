@@ -28,8 +28,7 @@ import {
   type PlayerWeapon
 } from "@/src/server/repositories/player-profile-repository";
 import {
-  getAllServersWeeklyLeaderboard,
-  getWeeklyServerLeaderboard,
+  getWeeklyLeaderboard,
   type LeaderboardPlayer
 } from "@/src/server/repositories/player-stats-repository";
 import { getPlayerModerationSummary } from "@/src/server/repositories/moderation-repository";
@@ -40,15 +39,6 @@ type PlayerPageProps = {
   params: Promise<{ pid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
-
-function parsePlayerId(rawPid: string): number | null {
-  const parsed = Number.parseInt(rawPid, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
 
 function parseDogtagView(value: string | null): DogtagView {
   return value === "surrendered" ? "surrendered" : "collected";
@@ -122,7 +112,7 @@ function groupWeaponsByCategory(weapons: PlayerWeapon[]): WeaponCategoryGroup[] 
 
 export default async function PlayerPage({ params, searchParams }: PlayerPageProps) {
   const { pid } = await params;
-  const playerId = parsePlayerId(pid);
+  const playerId = parsePositiveInt(pid);
   if (!playerId) {
     notFound();
   }
@@ -177,17 +167,14 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
         activeServerIds: profileScope.serverIds,
         recentLimit: 5
       }),
-      serverScope === null
-        ? getAllServersWeeklyLeaderboard({
-            serverIds: context.servers.map((server) => server.serverId),
-            gameId,
-            limit: 3
-          })
-        : getWeeklyServerLeaderboard({
-            serverId: serverScope.serverId,
-            gameId,
-            limit: 3
-          })
+      getWeeklyLeaderboard({
+        serverIds:
+          serverScope === null
+            ? context.servers.map((server) => server.serverId)
+            : [serverScope.serverId],
+        gameId,
+        limit: 3
+      })
     ]);
 
   if (!profile) {

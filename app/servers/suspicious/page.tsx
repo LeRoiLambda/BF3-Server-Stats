@@ -5,10 +5,7 @@ import {
 } from "@/src/server/routing/server-pages";
 
 export default async function AllServersSuspiciousPage({ searchParams }: AllServersPageProps) {
-  return (
-    <SuspiciousSection
-      scope={await getAllServersPageScope("suspicious")}
-      searchParams={(await searchParams) ?? {}}
-    />
-  );
+  const query = (await searchParams) ?? {};
+
+  return <SuspiciousSection scope={await getAllServersPageScope("suspicious", query)} searchParams={query} />;
 }

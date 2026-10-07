@@ -9,11 +9,22 @@ export type WallClock = {
 
 const SQL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/;
 
-// Building a formatter costs far more than using one, so each zone gets one.
+const MS_PER_DAY = 86_400_000;
+
 const wallClockFormats = new Map<string, Intl.DateTimeFormat>();
+const zoneNameFormats = new Map<string, Intl.DateTimeFormat>();
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
+}
+
+export function isValidTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function wallClockFormat(timeZone: string): Intl.DateTimeFormat {
@@ -52,25 +63,26 @@ export function wallClockInTimeZone(date: Date, timeZone: string): WallClock {
   };
 }
 
-// Finds the instant at which the given wall-clock time occurs in `timeZone`.
-// The second pass corrects the offset when a daylight saving change falls
-// between the first guess and the instant.
-export function wallClockToInstant(wallClock: WallClock, timeZone: string): Date {
-  const wallTime = wallClockToNaiveDate(wallClock).getTime();
-  let instant = wallTime;
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    const offset =
-      wallClockToNaiveDate(wallClockInTimeZone(new Date(instant), timeZone)).getTime() -
-      instant;
-    instant = wallTime - offset;
-  }
-
-  return new Date(instant);
+function offsetAt(instant: number, timeZone: string): number {
+  const wallClock = wallClockInTimeZone(new Date(instant), timeZone);
+  return wallClockToNaiveDate(wallClock).getTime() - instant;
 }
 
-// Calendar arithmetic on wall-clock values without any time zone: the value is
-// held in a Date whose UTC fields are the wall-clock fields.
+// A repeated wall-clock time gives its earlier instant; a skipped one moves past the change.
+export function wallClockToInstant(wallClock: WallClock, timeZone: string): Date {
+  const wallTime = wallClockToNaiveDate(wallClock).getTime();
+  const offsetBefore = offsetAt(wallTime - MS_PER_DAY, timeZone);
+  const offsetAfter = offsetAt(wallTime + MS_PER_DAY, timeZone);
+  const occurrences = [wallTime - offsetBefore, wallTime - offsetAfter].filter(
+    (instant) => offsetAt(instant, timeZone) === wallTime - instant
+  );
+
+  return new Date(
+    occurrences.length > 0 ? Math.min(...occurrences) : wallTime - offsetBefore
+  );
+}
+
+// A Date whose UTC fields hold a wall-clock time, for calendar arithmetic without a zone.
 export function wallClockToNaiveDate(wallClock: WallClock): Date {
   return new Date(Date.UTC(
     wallClock.year,
@@ -104,8 +116,6 @@ export function formatSqlDateTime(wallClock: WallClock): string {
   ].join(" ");
 }
 
-// Reads a stored "YYYY-MM-DD HH:MM:SS" value. Zero dates and impossible ones
-// such as 2026-02-31 return null.
 export function parseSqlDateTime(value: unknown): WallClock | null {
   if (typeof value !== "string") {
     return null;
@@ -123,8 +133,57 @@ export function parseSqlDateTime(value: unknown): WallClock | null {
   return formatSqlDateTime(normalized) === formatSqlDateTime(wallClock) ? wallClock : null;
 }
 
-// The instant of a stored UTC value, such as an AdKats record time.
 export function parseUtcDateTime(value: unknown): Date | null {
   const wallClock = parseSqlDateTime(value);
   return wallClock ? wallClockToNaiveDate(wallClock) : null;
+}
+
+function zoneName(instant: Date, timeZone: string): string {
+  let format = zoneNameFormats.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" });
+    zoneNameFormats.set(timeZone, format);
+  }
+
+  return (
+    format.formatToParts(instant).find((part) => part.type === "timeZoneName")?.value ??
+    timeZone
+  );
+}
+
+export function formatInZone(instant: Date, timeZone: string): string {
+  return `${formatSqlDateTime(wallClockInTimeZone(instant, timeZone))} ${zoneName(instant, timeZone)}`;
+}
+
+export function dateInZone(instant: Date, timeZone: string): string {
+  return formatSqlDate(wallClockInTimeZone(instant, timeZone));
+}
+
+export function datesInZone(from: Date, to: Date, timeZone: string): string[] {
+  const lastDate = dateInZone(to, timeZone);
+  const day = wallClockToNaiveDate({
+    ...wallClockInTimeZone(from, timeZone),
+    hour: 0,
+    minute: 0,
+    second: 0
+  });
+  const dates: string[] = [];
+
+  let date = formatSqlDate(naiveDateToWallClock(day));
+  while (date <= lastDate) {
+    dates.push(date);
+    day.setUTCDate(day.getUTCDate() + 1);
+    date = formatSqlDate(naiveDateToWallClock(day));
+  }
+
+  return dates;
+}
+
+export function dayStartInZone(date: string, timeZone: string, days = 0): Date {
+  const [year, month, day] = date.split("-").map(Number);
+
+  return wallClockToInstant(
+    naiveDateToWallClock(new Date(Date.UTC(year, month - 1, day + days))),
+    timeZone
+  );
 }

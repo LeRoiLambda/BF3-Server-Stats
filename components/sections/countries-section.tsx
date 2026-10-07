@@ -28,7 +28,6 @@ type CountriesSectionProps = {
   searchParams: SearchParams;
 };
 
-// ?c= lists the country tabs to show; ?country= selects one of them.
 function parseTabCodes(searchParams: SearchParams): string[] {
   return Array.from(
     new Set(
@@ -99,7 +98,7 @@ export async function CountriesSection({ scope, searchParams }: CountriesSection
                 <p>
                   <span className="text-slate-400">Country:</span>{" "}
                   <span className="inline-flex items-center gap-2">
-                    <CountryFlag countryCode={snapshot.selectedCountryCode} />
+                    <CountryFlag countryCode={snapshot.selectedCountryCode} decorative />
                     {formatCountryName(snapshot.selectedCountryCode)}
                   </span>
                 </p>

@@ -33,7 +33,6 @@ export type ServerPageScope = {
   server: ActiveServer;
 };
 
-// A section page shows either every server the site lists or one of them.
 export type PageScope = AllServersPageScope | ServerPageScope;
 
 type HrefQuery = Record<string, string | number | null | undefined>;
@@ -78,7 +77,6 @@ export function scopeName(scope: PageScope): string {
   return scope.kind === "all" ? "All Servers" : scope.server.serverName;
 }
 
-// The server that player links and searches stay on; null for all servers.
 export function scopeServerId(scope: PageScope): number | null {
   return scope.kind === "all" ? null : scope.server.serverId;
 }
@@ -102,13 +100,28 @@ export function nextOrder<TSort extends string>(
   return order === "asc" ? "desc" : "asc";
 }
 
+function searchParamsQuery(searchParams: SearchParams): string {
+  const params = new URLSearchParams();
+
+  for (const [name, value] of Object.entries(searchParams)) {
+    for (const entry of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+      params.append(name, entry);
+    }
+  }
+
+  return params.toString();
+}
+
 export async function getAllServersPageScope(
-  section: ServerSection
+  section: ServerSection,
+  searchParams: SearchParams = {}
 ): Promise<AllServersPageScope> {
   const context = await getServerContext();
 
   if (context.servers.length === 1) {
-    redirect(serverSectionHref(context.servers[0].serverId, section));
+    const path = serverSectionHref(context.servers[0].serverId, section);
+    const query = searchParamsQuery(searchParams);
+    redirect(query ? `${path}?${query}` : path);
   }
 
   if (!context.gameId || context.servers.length === 0) {

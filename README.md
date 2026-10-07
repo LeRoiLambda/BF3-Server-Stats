@@ -25,7 +25,8 @@ fork: https://github.com/leroilambda/adkats.
 - Overall and weekly leaderboards for one server or all active servers.
 - Player profiles with score, rank positions, weapon stats, dogtags, and
   moderation status.
-- Chat log browsing with search and autocomplete.
+- A live chat log: search it by words or phrases, follow one player or channel,
+  jump to any date and time, and open any message in its conversation.
 - Map and country statistics.
 - Suspicious-player and ban views using optional AdKats data when available.
 - Health and server-list API endpoints for diagnostics.
@@ -42,7 +43,7 @@ fork: https://github.com/leroilambda/adkats.
 
 ## Requirements
 
-- Node.js 20.9 or newer
+- Node.js 20.19 or a later 20.x, or 22.12 or newer
 - npm
 - A MySQL database containing the BF3 stats tables produced by the Procon
   stats/mapstats logger
@@ -91,14 +92,24 @@ will cause startup or request failures.
 | `BF3_STATS_DB_USER` | MySQL user. |
 | `BF3_STATS_DB_PASS` | MySQL password. |
 | `BF3_STATS_BANNER_IMAGE` | Public image path for the header banner, for example `/images/bf3-logo.png`. |
-| `BF3_STATS_TIME_ZONE` | IANA timezone the site shows times in, for example `Europe/Paris`. Defaults to `America/Los_Angeles`. The daily player trend, the weekly leaderboard's Monday reset and chat searches such as "today" follow it too. |
+| `BF3_STATS_TIME_ZONE` | IANA timezone the site shows times in, for example `Europe/Paris`. Defaults to `America/Los_Angeles`. The chat's days, the daily player trend and the weekly leaderboard's Monday reset follow it too. |
 | `BF3_STATS_LOGGER_TIME_ZONE` | IANA timezone of the machine running Procon, for example `Europe/Paris` or `UTC`. The stats logger stamps rows with that machine's local time. |
 | `BF3_STATS_LOGGER_TIME_OFFSET` | The stats logger's "Servertime Offset" setting, in hours. Defaults to `0`. |
 
 The stats logger and AdKats store times without a time zone: the logger writes
-the Procon host's local time plus its offset, and AdKats writes UTC. The site
-converts both and shows every time in `BF3_STATS_TIME_ZONE`, followed by the
-zone's abbreviation, such as `PDT`, or its UTC offset, such as `GMT+2`.
+the Procon host's local time plus its offset, and AdKats writes UTC. On servers
+where AdKats' "Post Stat Logger Chat Manually" setting is on, AdKats writes the
+chat log instead of the logger, in UTC; the site reads that setting from
+`adkats_settings` and applies its current value to all of the server's chat,
+including lines written before it changed. The site converts every time and shows it in
+`BF3_STATS_TIME_ZONE`, followed by the zone's abbreviation, such as `PDT`, or
+its UTC offset, such as `GMT+2`.
+
+With AdKats' "Feed Stat Logger Settings" on, AdKats sets the logger's
+"Servertime Offset" every hour so that the logger writes UTC, whatever the
+Procon host's zone and its daylight saving time: set
+`BF3_STATS_LOGGER_TIME_ZONE=UTC` and `BF3_STATS_LOGGER_TIME_OFFSET=0`. Copying
+the offset AdKats set would be right until the host's clock next changes.
 
 ## Available Scripts
 
@@ -139,7 +150,7 @@ node scripts/smoke-test.mjs http://localhost:3000
 | `/servers/home` | All-servers live overview. |
 | `/servers/[sid]` | Per-server home page with live scoreboard. |
 | `/servers/[sid]/leaders` | Per-server leaderboard. |
-| `/servers/[sid]/chat` | Per-server chat log search. |
+| `/servers/[sid]/chat` | Per-server live chat log. |
 | `/servers/[sid]/maps` | Per-server map and mode stats. |
 | `/servers/[sid]/countries` | Per-server country breakdown. |
 | `/servers/[sid]/suspicious` | Per-server suspicious-player list. |
@@ -148,6 +159,24 @@ node scripts/smoke-test.mjs http://localhost:3000
 | `/servers/leaders` | All-servers leaderboard. |
 | `/players/[pid]` | Player profile, optionally scoped with `?sid=[serverId]`. |
 
+The chat pages (`/servers/chat` and `/servers/[sid]/chat`) read these query
+parameters:
+
+| Parameter | Effect |
+| --- | --- |
+| `q` | Messages containing every word, in any order; `"a phrase"` in quotes matches as typed. |
+| `player` | Messages from one player, by player id. |
+| `channel` | `global`, `team` or `squad` chat only. |
+| `date` | Shows a day's messages, such as `2026-09-25`, from its end back, and the days before. |
+| `hour` | With `date`, starts from the end of that hour, `0` to `23`, instead of the day's. |
+| `msg` | Shows a message, by id, among the messages around it. |
+| `before`, `after` | Shows the messages before or after a message id. |
+
+The chat lists the newest messages first and loads older ones as the page
+scrolls down. While the latest messages are shown, it checks for new ones
+every 10 seconds: they appear at the top, or wait behind a button while the
+reader is further down.
+
 ## API Endpoints
 
 | Endpoint | Purpose |
@@ -155,7 +184,7 @@ node scripts/smoke-test.mjs http://localhost:3000
 | `/api/health` | Checks database connectivity and active server context. |
 | `/api/servers` | Returns active server data as JSON. |
 | `/api/players/suggest` | Player autocomplete for search fields. |
-| `/api/search/chat` | Chat search autocomplete. |
+| `/api/chat` | Chat messages for the chat page, newest first: the same filters, `sid` for one server, and `before` or `after` a message id. |
 
 ## Project Structure
 
@@ -164,6 +193,7 @@ app/                         Next.js pages and API routes
 components/                  Shared React components
 components/layout/           Shell, navigation, and UI class helpers
 components/sections/         Section pages shared by the all-servers and per-server routes
+components/chat/             Chat transcript, filters and message views
 components/search/           Player autocomplete and search widgets
 components/stats/            Stats tables, badges, charts, and profile sections
 src/server/db/               MySQL pool, health check, and table availability checks
@@ -215,6 +245,8 @@ Some features are optional and are enabled only when their tables exist:
   fork creates it; without it the server page shows the live map alone.
 - `tbl_chatlog.logPlayerID`, which AdKats adds, to link chat lines to players.
   Without it, chat speakers are matched to players by name.
+- `adkats_settings` for which servers' chat log AdKats writes, in UTC. Without
+  it, the stats logger's clock applies to all chat.
 
 The repository layer checks optional table availability and returns empty or
 unavailable states when those tables are missing.
@@ -227,7 +259,8 @@ table layouts:
 - `01-logger-schema.sql` and `02-adkats-schema.sql` create the tables.
 - `03-logger-data.sql` and `04-adkats-data.sql` fill them with three servers
   (one hidden with `ConnectionState` 'off'), about 260 players, recent rounds,
-  sessions and chat, and a few bans, mutes and punishments.
+  sessions and chat, and a few bans, mutes and punishments. With the AdKats
+  file, AdKats writes server 1's chat log.
 
 Times are relative to when the files are loaded and written in UTC, so the
 live, weekly and moderation views have current data after each load; the site
@@ -258,8 +291,11 @@ npm run start
 
 `npm run start` loads the same `.env` files as `next start`
 (`.env.production.local`, `.env.local`, `.env.production` and `.env`), then
-starts `.next/standalone/server.js`. The server listens on `PORT` (default
-`3000`) and `HOSTNAME` (default `0.0.0.0`).
+starts `.next/standalone/server.js` on every IPv4 interface, on `PORT` (default
+`3000`). It takes `next start`'s `-H`, `-p` and `--keepAliveTimeout` options:
+`npm run start -- -H 127.0.0.1 -p 8080` picks the address and port, and `-H ::`
+listens on IPv6 too. Started on its own, as in Docker or on Passenger,
+`server.js` reads `PORT` and `HOSTNAME` (default `0.0.0.0`) instead.
 
 ### Docker
 
@@ -300,10 +336,11 @@ docker build --platform linux/amd64 --target bundle --output dist .
 - Check `.env.local` when startup fails with an environment validation error.
 - Confirm `BF3_STATS_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_ZONE` are valid IANA
   timezones.
-- If chat, round or first and last seen times, the weekly leaderboard or chat
-  searches such as "today" are off by some hours, check
+- If chat, round or first and last seen times, the weekly leaderboard or the
+  chat's "jump to" field are off by some hours, check
   `BF3_STATS_LOGGER_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_OFFSET` against the
-  Procon host and the logger's settings.
+  Procon host and the logger's settings, or against AdKats' "Feed Stat Logger
+  Settings", which makes the logger write UTC.
 - If weekly leaderboards, dogtags, bans, or moderation sections are unavailable,
   check whether the optional tables exist in the database.
 - If images are missing, verify that the referenced files exist under

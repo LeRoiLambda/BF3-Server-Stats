@@ -22,21 +22,10 @@ function normalizeServerIds(serverIds: number[] | undefined): number[] {
   );
 }
 
-export function normalizeServerScopeInput(
-  input: number | ServerScopeInput
-): ServerScopeInput {
-  if (typeof input === "number") {
-    return { serverId: input };
-  }
-
-  return input;
-}
-
 export function buildServerScopeCondition(
   columnName: string,
-  input: number | ServerScopeInput
+  scope: ServerScopeInput
 ): ServerScopeCondition {
-  const scope = normalizeServerScopeInput(input);
   const serverIds = normalizeServerIds(scope.serverIds);
   if (serverIds.length > 0) {
     return {

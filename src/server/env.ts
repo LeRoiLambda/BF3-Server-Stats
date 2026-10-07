@@ -1,16 +1,8 @@
 import { z } from "zod";
+import { isValidTimeZone } from "@/src/server/utils/time-zones";
 
 const DEFAULT_BANNER_IMAGE = "/images/bf3-logo.png";
 const DEFAULT_TIME_ZONE = "America/Los_Angeles";
-
-function isValidTimeZone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function normalizeBannerImagePath(value: string): string {
   const imagePath = value.trim();
@@ -30,8 +22,6 @@ function normalizeBannerImagePath(value: string): string {
   return imagePath;
 }
 
-// Blank values (`NAME=`) count as unset, so optional variables get their
-// defaults.
 function blankAsUnset(value: unknown): unknown {
   return typeof value === "string" && value.trim() === "" ? undefined : value;
 }

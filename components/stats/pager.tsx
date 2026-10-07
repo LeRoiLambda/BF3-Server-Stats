@@ -55,7 +55,6 @@ function buildPageItems(page: number, totalPages: number): PageItem[] {
 
 function buildOpenPageItems(page: number, hasNextPage: boolean): PageItem[] {
   const start = Math.max(1, page - 2);
-  // Without a total, only the page after this one is known to exist.
   const end = page + (hasNextPage ? 1 : 0);
   const pages = Array.from(
     { length: end - start + 1 },

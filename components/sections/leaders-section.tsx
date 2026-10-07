@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { SegmentedNav } from "@/components/layout/segmented-nav";
 import { StatsShell } from "@/components/layout/stats-shell";
-import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
+import { SortHeading } from "@/components/layout/sort-heading";
+import { ui } from "@/components/layout/stats-ui";
 import { PlayerAutocompleteInput } from "@/components/search/player-autocomplete-input";
 import { PlayerDisciplineBadge } from "@/components/stats/player-discipline-badge";
 import { StatsPager } from "@/components/stats/pager";
@@ -12,16 +13,14 @@ import {
   playerTableRowClass
 } from "@/components/stats/player-link";
 import { WeeklyLeaderboardRank } from "@/components/stats/weekly-leaderboard-rank";
+import { WeeklyUnrankedServersNote } from "@/components/stats/weekly-leaderboard-section";
 import {
-  getAllServersLeaderboard,
-  getAllServersWeeklyLeaderboard,
-  getServerLeaderboard,
-  getWeeklyServerLeaderboard,
+  getLeaderboard,
+  getWeeklyLeaderboard,
   parseLeaderboardPage,
   parseLeaderSort,
   parseSortOrder,
-  type LeaderSort,
-  type SortOrder
+  type LeaderSort
 } from "@/src/server/repositories/player-stats-repository";
 import { firstValue } from "@/src/server/routing/params";
 import {
@@ -46,29 +45,8 @@ const SORT_LABELS: Record<LeaderSort, string> = {
   hsr: "HSR"
 };
 
-function loadLeaderboard(
-  scope: PageScope,
-  query: { sort: LeaderSort; order: SortOrder; page: number; search: string | null }
-) {
-  const input = { ...query, gameId: scope.gameId, pageSize: 20 };
-
-  return scope.kind === "all"
-    ? getAllServersLeaderboard({ ...input, serverIds: scope.serverIds })
-    : getServerLeaderboard({ ...input, serverId: scope.server.serverId });
-}
-
-function loadWeeklyLeaderboard(scope: PageScope) {
-  return scope.kind === "all"
-    ? getAllServersWeeklyLeaderboard({
-        serverIds: scope.serverIds,
-        gameId: scope.gameId,
-        limit: 20
-      })
-    : getWeeklyServerLeaderboard({
-        serverId: scope.server.serverId,
-        gameId: scope.gameId,
-        limit: 20
-      });
+function scopeServerIds(scope: PageScope): number[] {
+  return scope.kind === "all" ? scope.serverIds : [scope.server.serverId];
 }
 
 export async function LeadersSection({ scope, searchParams }: LeadersSectionProps) {
@@ -79,11 +57,14 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
   const search = firstValue(searchParams.q)?.trim() || null;
   const serverId = scopeServerId(scope);
 
+  const serverIds = scopeServerIds(scope);
   const [result, weeklyResult] = await Promise.all([
     view === "overall"
-      ? loadLeaderboard(scope, { sort, order, page, search })
+      ? getLeaderboard({ serverIds, gameId: scope.gameId, sort, order, page, pageSize: 20, search })
       : Promise.resolve(null),
-    view === "weekly" ? loadWeeklyLeaderboard(scope) : Promise.resolve(null)
+    view === "weekly"
+      ? getWeeklyLeaderboard({ serverIds, gameId: scope.gameId, limit: 20 })
+      : Promise.resolve(null)
   ]);
 
   return (
@@ -122,6 +103,8 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
               <PlayerAutocompleteInput
                 name="q"
                 placeholder="Search player..."
+                label="Search player"
+                submitOnPick
                 defaultValue={search ?? ""}
                 serverId={serverId}
                 className={ui.input}
@@ -146,35 +129,29 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
             <thead className={ui.tableHead}>
               <tr>
                 <th className={ui.th}>#</th>
-                {(Object.keys(SORT_LABELS) as LeaderSort[]).map((sortKey) => {
-                  const isActive = view === "overall" && sort === sortKey;
-
-                  return (
-                    <th key={sortKey} className={ui.th}>
-                      {view === "overall" ? (
-                        <Link
-                          href={scopeHref(scope, "leaders", {
-                            view: "overall",
-                            sort: sortKey,
-                            order: nextOrder(
-                              sort,
-                              sortKey,
-                              order,
-                              sortKey === "soldierName" ? "asc" : "desc"
-                            ),
-                            q: search
-                          })}
-                          className={sortableHeadingClass(isActive)}
-                        >
-                          {SORT_LABELS[sortKey]}
-                          {isActive ? (order === "asc" ? "↑" : "↓") : null}
-                        </Link>
-                      ) : (
-                        SORT_LABELS[sortKey]
-                      )}
-                    </th>
-                  );
-                })}
+                {(Object.keys(SORT_LABELS) as LeaderSort[]).map((sortKey) => (
+                  <th key={sortKey} className={ui.th}>
+                    {view === "overall" ? (
+                      <SortHeading
+                        href={scopeHref(scope, "leaders", {
+                          view: "overall",
+                          sort: sortKey,
+                          order: nextOrder(
+                            sort,
+                            sortKey,
+                            order,
+                            sortKey === "soldierName" ? "asc" : "desc"
+                          ),
+                          q: search
+                        })}
+                        label={SORT_LABELS[sortKey]}
+                        activeOrder={sort === sortKey ? order : null}
+                      />
+                    ) : (
+                      SORT_LABELS[sortKey]
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -266,6 +243,9 @@ export async function LeadersSection({ scope, searchParams }: LeadersSectionProp
               })
             }
           />
+        ) : null}
+        {weeklyResult ? (
+          <WeeklyUnrankedServersNote result={weeklyResult} servers={scope.context.servers} />
         ) : null}
       </section>
     </StatsShell>

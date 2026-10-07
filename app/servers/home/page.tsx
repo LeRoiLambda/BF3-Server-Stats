@@ -9,11 +9,10 @@ import {
   formatMapName,
   mapImagePath
 } from "@/src/server/domain/bf3-reference";
-import {
-  getAllServersWeeklyLeaderboard
-} from "@/src/server/repositories/player-stats-repository";
+import { getWeeklyLeaderboard } from "@/src/server/repositories/player-stats-repository";
 import { isServerOnline } from "@/src/server/repositories/server-repository";
 import {
+  allServersHref,
   getAllServersPageScope,
   serverSectionHref
 } from "@/src/server/routing/server-pages";
@@ -28,7 +27,7 @@ function occupancyPercent(usedSlots: number, maxSlots: number): number {
 
 export default async function AllServersHomePage() {
   const scope = await getAllServersPageScope("home");
-  const weeklyTopPlayers = await getAllServersWeeklyLeaderboard({
+  const weeklyTopPlayers = await getWeeklyLeaderboard({
     serverIds: scope.serverIds,
     gameId: scope.gameId,
     limit: 20
@@ -135,7 +134,8 @@ export default async function AllServersHomePage() {
 
       <WeeklyLeaderboardSection
         result={weeklyTopPlayers}
-        fullLeadersHref="/servers/leaders?view=weekly"
+        servers={scope.context.servers}
+        fullLeadersHref={allServersHref("leaders", { view: "weekly" })}
         className="mt-6"
       />
     </StatsShell>

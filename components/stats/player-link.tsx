@@ -56,9 +56,6 @@ export function PlayerIdentity({
   );
 }
 
-// Makes a whole table row link to the player's profile. The `primary` cell (the
-// player's name) holds the focusable link; the other cells get an overlay link
-// hidden from keyboard and screen-reader users, so each row is one tab stop.
 export function PlayerTableCellLink({
   playerId,
   serverId = null,
@@ -66,8 +63,6 @@ export function PlayerTableCellLink({
   className,
   children
 }: PlayerTableCellLinkProps) {
-  // Rows without a player record (server messages, unknown speakers) stay plain
-  // text.
   if (playerId === null) {
     return children;
   }

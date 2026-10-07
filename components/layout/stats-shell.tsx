@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { navButtonClass, ui } from "@/components/layout/stats-ui";
-import { ServerScopeSelect } from "@/components/layout/server-scope-select";
+import { LinkMenu } from "@/components/layout/link-menu";
 import { PlayerProfileSearchForm } from "@/components/search/player-profile-search-form";
 import {
   SERVER_NAV_SECTIONS,
@@ -58,42 +58,33 @@ export function StatsShell({
   const battlelogHref = currentServer
     ? battlelogServerSearchHref(currentServer.serverName)
     : null;
-  const scopeSection = activeSection;
-  const allServersScopeHref = allServersHref(scopeSection);
-  const selectedScopeHref = hasServerScope
-    ? serverSectionHref(currentServerId, scopeSection)
-    : allServersScopeHref;
+  const sectionHref = (section: ServerSection) =>
+    hasServerScope ? serverSectionHref(currentServerId, section) : allServersHref(section);
   const defaultScopeOptions = [
     ...servers.map((server) => ({
       label: server.serverName,
-      href: serverSectionHref(server.serverId, scopeSection),
+      href: serverSectionHref(server.serverId, activeSection),
     })),
     {
       label: "All Servers",
-      href: allServersScopeHref,
+      href: allServersHref(activeSection),
     },
   ];
   const effectiveScopeOptions = scopeOptions ?? defaultScopeOptions;
-  const effectiveScopeValue = scopeValue ?? selectedScopeHref;
+  const effectiveScopeValue = scopeValue ?? sectionHref(activeSection);
   const hasScopeSelect = scopeOptions
     ? effectiveScopeOptions.length > 1
     : hasMultipleServers;
   const bannerImage = readEnv().BF3_STATS_BANNER_IMAGE;
+  const sections: ServerSection[] = ["home", ...SERVER_NAV_SECTIONS];
 
   return (
     <main className={ui.pageContainer}>
-      <header className="stats-panel overflow-visible rounded-sm">
-        <div className="rounded-t-sm border-b border-slate-600/35 bg-slate-950/90 px-4 py-4 sm:px-6">
+      <header className="stats-panel overflow-visible">
+        <div className="border-b border-slate-600/35 bg-slate-950/90 px-3 py-4 sm:rounded-t-sm sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Link
-                href={
-                  hasServerScope
-                    ? serverSectionHref(currentServerId, "home")
-                    : allServersHref("home")
-                }
-                className="inline-flex"
-              >
+              <Link href={sectionHref("home")} className="inline-flex">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={bannerImage}
@@ -115,10 +106,14 @@ export function StatsShell({
             {battlelogHref || hasScopeSelect || titleAction ? (
               <div className="flex w-full shrink-0 flex-nowrap items-center justify-end gap-2 sm:w-auto">
                 {hasScopeSelect ? (
-                  <ServerScopeSelect
-                    value={effectiveScopeValue}
-                    options={effectiveScopeOptions}
-                    className={`${ui.input} h-9 min-w-0 w-56 max-w-full`}
+                  <LinkMenu
+                    label="Server"
+                    align="end"
+                    items={effectiveScopeOptions.map((option) => ({
+                      ...option,
+                      current: option.href === effectiveScopeValue
+                    }))}
+                    className="min-w-0 flex-1 sm:w-56 sm:flex-none"
                   />
                 ) : null}
                 {titleAction}
@@ -142,37 +137,30 @@ export function StatsShell({
           ) : null}
         </div>
 
-        <section className="rounded-b-sm bg-slate-950/70 px-4 py-3 sm:px-6">
+        <section className="bg-slate-950/70 px-3 py-3 sm:rounded-b-sm sm:px-6">
           <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <nav className="flex min-w-0 flex-wrap gap-1.5 xl:flex-nowrap">
-              <Link
-                href={
-                  hasServerScope
-                    ? serverSectionHref(currentServerId, "home")
-                    : allServersHref("home")
-                }
-                className={navButtonClass(activeSection === "home")}
-              >
-                Home
-              </Link>
-              {SERVER_NAV_SECTIONS.map((section) => {
-                const href = hasServerScope
-                  ? serverSectionHref(currentServerId, section)
-                  : allServersHref(section);
-
-                return (
-                  <Link
-                    key={section}
-                    href={href}
-                    className={navButtonClass(activeSection === section)}
-                  >
-                    {sectionLabel(section)}
-                  </Link>
-                );
-              })}
+            <nav aria-label="Sections" className="hidden min-w-0 flex-wrap gap-1.5 sm:flex xl:flex-nowrap">
+              {sections.map((section) => (
+                <Link
+                  key={section}
+                  href={sectionHref(section)}
+                  className={navButtonClass(activeSection === section)}
+                >
+                  {sectionLabel(section)}
+                </Link>
+              ))}
             </nav>
 
-            <div className="flex min-w-0 justify-end xl:shrink-0">
+            <div className="flex min-w-0 items-center gap-2 sm:justify-end xl:shrink-0">
+              <LinkMenu
+                label="Section"
+                items={sections.map((section) => ({
+                  label: sectionLabel(section),
+                  href: sectionHref(section),
+                  current: section === activeSection
+                }))}
+                className="w-32 shrink-0 sm:hidden"
+              />
               <PlayerProfileSearchForm
                 serverId={currentServerId}
                 inputClassName={ui.input}
