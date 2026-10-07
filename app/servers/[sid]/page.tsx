@@ -11,7 +11,7 @@ import {
 } from "@/components/stats/player-link";
 import { WeeklyLeaderboardSection } from "@/components/stats/weekly-leaderboard-section";
 import { listServerMapRotation } from "@/src/server/repositories/map-rotation-repository";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import {
   getWeeklyServerLeaderboard,
   listCurrentPlayersByServer,
@@ -134,7 +134,7 @@ export default async function ServerHomePage({
     firstValue(resolvedSearchParams.scoreboardOrder)
   );
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

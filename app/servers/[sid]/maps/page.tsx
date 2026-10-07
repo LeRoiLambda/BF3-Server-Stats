@@ -4,7 +4,7 @@ import { switchButtonClass, ui } from "@/components/layout/stats-ui";
 import { MapLabel } from "@/components/stats/map-label";
 import { formatGamemodeName } from "@/src/server/domain/bf3-reference";
 import { getServerMapsSnapshot } from "@/src/server/repositories/maps-repository";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
 type MapsPageProps = {
@@ -18,11 +18,6 @@ function parseSelectedGamemode(
   const mode = firstValue(searchParams.mode);
   if (mode?.trim()) {
     return mode.trim();
-  }
-
-  const legacyMode = firstValue(searchParams.c);
-  if (legacyMode?.trim()) {
-    return legacyMode.trim();
   }
 
   return null;
@@ -44,7 +39,7 @@ export default async function MapsPage({ params, searchParams }: MapsPageProps) 
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const selectedGamemode = parseSelectedGamemode(resolvedSearchParams);
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

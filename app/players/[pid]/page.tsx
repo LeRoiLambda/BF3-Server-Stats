@@ -32,7 +32,7 @@ import {
   type LeaderboardPlayer
 } from "@/src/server/repositories/player-stats-repository";
 import { getPlayerModerationSummary } from "@/src/server/repositories/moderation-repository";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
 type PlayerPageProps = {
@@ -132,7 +132,7 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
   const requestedWeaponCategory = firstValue(resolvedSearchParams.weaponCategory);
   const tagView = parseDogtagView(firstValue(resolvedSearchParams.tagView));
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const gameId = context.gameId;
   if (!gameId) {
     notFound();

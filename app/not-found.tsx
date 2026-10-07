@@ -2,10 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 
 export default async function NotFound() {
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
 
   // With no active servers every stats page 404s; /servers explains why.
   if (context.servers.length === 0) {

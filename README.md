@@ -42,40 +42,41 @@ fork: https://github.com/leroilambda/adkats.
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 20.9 or newer
 - npm
 - A MySQL database containing the BF3 stats tables produced by the Procon
   stats/mapstats logger
 - Optional AdKats tables for bans, moderation records, and policy data
 - Network access from the app host to that database
+- Docker, optionally, for the sample database and the container image
 
-This repository does not include database migrations or seed data. It expects an
-existing BF3 stats database, typically populated by the legacy Procon
-stats/mapstats logger and extended by the AdKats fork.
+The app reads an existing BF3 stats database, filled by the Procon
+stats/mapstats logger and optionally extended by AdKats. It never writes to it.
+For development, `sample-db/` holds a small generated database (see
+[Sample Database](#sample-database)).
 
 ## Setup
 
-Install dependencies:
+Install dependencies and create a local environment file:
 
 ```sh
 npm install
-```
-
-Create a local environment file:
-
-```sh
 cp .env.example .env.local
 ```
 
-Edit `.env.local` so it points at the BF3 stats database.
-
-Start the development server:
+`.env.example` points at the sample database. Start it with Docker, then the
+development server:
 
 ```sh
+docker compose up -d db
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. To use another BF3 stats database, edit
+`.env.local`.
+
+`docker compose up --build` runs the whole stack in Docker instead, with a
+production build of the app on http://localhost:3000.
 
 ## Environment Variables
 
@@ -89,7 +90,6 @@ will cause startup or request failures.
 | `BF3_STATS_DB_NAME` | MySQL database name. |
 | `BF3_STATS_DB_USER` | MySQL user. |
 | `BF3_STATS_DB_PASS` | MySQL password. |
-| `BF3_STATS_CLAN_NAME` | Clan or community name. Parsed for runtime config. |
 | `BF3_STATS_BANNER_IMAGE` | Public image path for the header banner, for example `/images/bf3-logo.png`. |
 | `BF3_STATS_WEEK_TIME_ZONE` | IANA timezone used for weekly leaderboard reset calculations, for example `America/Los_Angeles`. |
 | `BF3_STATS_LOGGER_TIME_ZONE` | IANA timezone of the machine running Procon, for example `Europe/Paris` or `UTC`. The stats logger stamps rows with that machine's local time. |
@@ -103,13 +103,27 @@ npm run build
 npm run start
 npm run lint
 npm run typecheck
+npm run test
 ```
 
 - `dev` starts the Next.js development server.
-- `build` creates a production build.
-- `start` serves the production build.
+- `build` creates the production build and its standalone server bundle.
+- `start` serves the standalone build.
 - `lint` runs ESLint.
 - `typecheck` runs TypeScript without emitting files.
+- `test` runs the unit tests in `tests/` with Vitest.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: lint, type
+check, unit tests and build, then `scripts/smoke-test.mjs`, which requests
+every page and API route against the sample database on MariaDB 10.11 and
+MySQL 8.0, with and without the AdKats tables. To run the smoke test locally,
+point it at running servers:
+
+```sh
+node scripts/smoke-test.mjs http://localhost:3000
+```
 
 ## Main Routes
 
@@ -152,18 +166,22 @@ src/server/repositories/     Database query layer
 src/server/routing/          Route parameter and section helpers
 src/server/utils/            Date and number formatting helpers
 public/images/               BF3 images, maps, ranks, weapons, and flags
+sample-db/                   Sample database: logger and AdKats tables and data
+scripts/                     Build and start helpers for the standalone server
+tests/                       Unit tests
 ```
 
 ## Database Notes
 
-The expected database is a shared MySQL database used by two Procon plugins:
+The expected database is a MySQL database shared by two Procon plugins:
 
 - The BF3 stats/mapstats logger, which produces the core server, player, chat,
-  map, weapon, and current-player tables.
-- The LeRoiLambda AdKats fork, which adds bans, moderation records, settings,
-  and related player metadata: https://github.com/leroilambda/adkats.
+  map, weapon, and current-player tables. It is required.
+- AdKats, which adds bans, moderation records, settings, and related player
+  metadata. It is optional. The site is developed against the LeRoiLambda fork:
+  https://github.com/leroilambda/adkats.
 
-The app queries legacy BF3 stats tables including:
+The app reads these stats logger tables:
 
 - `tbl_games`
 - `tbl_server`
@@ -184,59 +202,90 @@ Some features are optional and are enabled only when their tables exist:
   table but only fills it when its "Session ON?" and "Save Sessiondata to DB?"
   settings are enabled; weekly boards count sessions once the player has left.
 - `tbl_dogtags` for player dogtag sections
-- `adkats_bans` and other `adkats_*` tables for ban and moderation data
+- `adkats_bans`, `adkats_records_main`, `adkats_commands`, `adkats_settings`
+  and the `adkats_infractions_*` tables for bans, moderation details, infraction
+  points and the punishment ladder. Upstream AdKats creates them too.
+- `adkats_maplist` for the map rotation carousel. Only the LeRoiLambda AdKats
+  fork creates it; without it the server page shows the live map alone.
+- `tbl_chatlog.logPlayerID`, which AdKats adds, to link chat lines to players.
+  Without it, chat speakers are matched to players by name.
 
 The repository layer checks optional table availability and returns empty or
 unavailable states when those tables are missing.
 
+## Sample Database
+
+`sample-db/` holds a small generated database in the logger's and AdKats'
+table layouts:
+
+- `01-logger-schema.sql` and `02-adkats-schema.sql` create the tables.
+- `03-logger-data.sql` and `04-adkats-data.sql` fill them with three servers
+  (one hidden with `ConnectionState` 'off'), about 260 players, recent rounds,
+  sessions and chat, and a few bans, mutes and punishments.
+
+Times are relative to when the files are loaded and written in UTC, so the
+live, weekly and moderation views have current data after each load; the site
+needs `BF3_STATS_LOGGER_TIME_ZONE=UTC` for them. Loading only the two logger
+files gives a database without AdKats.
+
+`docker compose up -d db` serves the sample database on port 3307. It lives in
+memory and is loaded again on every start. To load it into another MySQL or
+MariaDB server, create an empty database and run the files in order:
+
+```sh
+mysql -u root -p bf3_stats < sample-db/01-logger-schema.sql
+mysql -u root -p bf3_stats < sample-db/02-adkats-schema.sql
+mysql -u root -p bf3_stats < sample-db/03-logger-data.sql
+mysql -u root -p bf3_stats < sample-db/04-adkats-data.sql
+```
+
 ## Deployment
 
-Build and run the production app:
+`npm run build` produces a self-contained server in `.next/standalone`: the
+compiled app, `server.js`, the `node_modules` it needs, `public/` and the
+static assets. It runs with Node.js alone:
 
 ```sh
 npm run build
 npm run start
 ```
 
-The production environment must define the same environment variables and must
-be able to connect to the MySQL database.
+`npm run start` loads the same `.env` files as `next start`
+(`.env.production.local`, `.env.local`, `.env.production` and `.env`), then
+starts `.next/standalone/server.js`. The server listens on `PORT` (default
+`3000`) and `HOSTNAME` (default `0.0.0.0`).
 
-### Custom Server Startup
+### Docker
 
-This repository uses `server.js` as its Node startup file. It is a custom Next.js
-server: it prepares the Next app and passes every request to Next's request
-handler.
-
-For hosts that ask for an application startup file, configure it to `server.js`.
-
-The server listens on `process.env.PORT` when the host provides one, and falls
-back to `3000` for local/manual runs.
-
-On memory-constrained hosts, building directly on the remote server may fail. In
-that case, build locally, archive the build output and runtime files, upload
-them, then extract them on the remote host. The remote host still needs
-production dependencies and the correct environment variables.
-
-Typical files to upload after a local build:
-
-```text
-.next/
-public/
-package.json
-package-lock.json
-next.config.ts
-server.js
-```
-
-Then install production dependencies on the remote host and start the app:
+The `Dockerfile` builds an image that runs the standalone server as the
+unprivileged `node` user on port 3000, with a health check on `/api/health`:
 
 ```sh
-npm ci --omit=dev
-npm run start
+docker build -t bf3-server-stats .
+docker run -p 3000:3000 --env-file .env.production bf3-server-stats
 ```
 
-If your host uses Passenger, restart the application through the host control
-panel or by touching the Passenger restart file, usually `tmp/restart.txt`.
+`--env-file` takes plain `NAME=value` lines, as in `.env.example`.
+
+### Node.js hosts and Passenger
+
+To run the app without the repository, copy the contents of
+`.next/standalone` to the host and start `node server.js`. On hosts that ask
+for an application startup file (Passenger, cPanel), set it to `server.js`,
+then restart the application from the control panel or by touching
+`tmp/restart.txt`.
+
+Set the environment variables through the host, or in a `.env.production`
+file next to `server.js`, which the server loads at startup.
+
+The bundle includes platform-specific binaries (`sharp`, which optimizes
+images), so build it for the host's operating system and CPU architecture:
+Linux x64 for most hosts. Docker can build it for Linux x64 on any machine
+and write it to `dist/`:
+
+```sh
+docker build --platform linux/amd64 --target bundle --output dist .
+```
 
 ## Troubleshooting
 

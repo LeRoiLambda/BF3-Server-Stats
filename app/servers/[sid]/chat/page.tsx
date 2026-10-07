@@ -11,7 +11,7 @@ import {
   playerTableRowClass
 } from "@/components/stats/player-link";
 import { SubsetBadge } from "@/components/stats/subset-badge";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import {
   getServerChatLog,
   parseChatPage,
@@ -74,7 +74,7 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
   const page = parseChatPage(firstValue(resolvedSearchParams.page));
   const query = firstValue(resolvedSearchParams.q)?.trim() || null;
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

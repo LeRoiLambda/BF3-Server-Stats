@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, type-check, test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  smoke:
+    name: Smoke test on ${{ matrix.database }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ["mariadb:10.11", "mysql:8.0"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Start the database
+        run: >-
+          docker run --detach --name db --publish 3306:3306
+          --env MARIADB_ROOT_PASSWORD=root --env MYSQL_ROOT_PASSWORD=root
+          ${{ matrix.database }}
+      - run: npm ci
+      - run: npm run build
+      - name: Load the sample database, with and without AdKats
+        run: |
+          for attempt in $(seq 1 60); do
+            docker exec db mysql -h127.0.0.1 -uroot -proot -e "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec db mysql -h127.0.0.1 -uroot -proot \
+            -e "CREATE DATABASE bf3_stats; CREATE DATABASE bf3_stats_logger;"
+          for file in sample-db/*.sql; do
+            docker exec -i db mysql -h127.0.0.1 -uroot -proot bf3_stats < "$file"
+          done
+          for file in sample-db/01-logger-schema.sql sample-db/03-logger-data.sql; do
+            docker exec -i db mysql -h127.0.0.1 -uroot -proot bf3_stats_logger < "$file"
+          done
+      - name: Request every page
+        env:
+          BF3_STATS_DB_HOST: 127.0.0.1
+          BF3_STATS_DB_USER: root
+          BF3_STATS_DB_PASS: root
+          BF3_STATS_LOGGER_TIME_ZONE: UTC
+        run: |
+          BF3_STATS_DB_NAME=bf3_stats PORT=3001 node .next/standalone/server.js &
+          BF3_STATS_DB_NAME=bf3_stats_logger PORT=3002 node .next/standalone/server.js &
+          node scripts/smoke-test.mjs http://127.0.0.1:3001 http://127.0.0.1:3002

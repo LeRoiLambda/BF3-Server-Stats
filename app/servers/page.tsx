@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 
 export default async function ServersPage() {
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
 
   if (context.servers.length === 1) {
     redirect(`/servers/${context.servers[0].serverId}`);

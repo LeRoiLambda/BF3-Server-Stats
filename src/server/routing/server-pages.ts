@@ -1,12 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import {
-  getLegacyServerContext,
-  type LegacyServerContext
+  getServerContext,
+  type ServerContext
 } from "@/src/server/repositories/server-repository";
 import type { ServerSection } from "@/src/server/routing/sections";
 
 export type AllServersPageScope = {
-  context: LegacyServerContext;
+  context: ServerContext;
   gameId: number;
   serverIds: number[];
 };
@@ -52,7 +52,7 @@ export function nextOrder<TSort extends string>(
 export async function getAllServersPageScope(
   section: ServerSection
 ): Promise<AllServersPageScope> {
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
 
   if (context.servers.length === 1) {
     redirect(serverSectionHref(context.servers[0].serverId, section));

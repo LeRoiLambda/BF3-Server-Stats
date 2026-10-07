@@ -13,7 +13,7 @@ import {
   normalizeCountryCode
 } from "@/src/server/domain/bf3-reference";
 import { getServerCountriesSnapshot } from "@/src/server/repositories/countries-repository";
-import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
+import { getServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
 type CountriesPageProps = {
@@ -30,9 +30,9 @@ function parseCountrySelection(
   searchParams: Record<string, string | string[] | undefined>
 ): CountrySelection {
   const requestedCodes: string[] = [];
-  const fromLegacy = firstValue(searchParams.c);
-  if (fromLegacy) {
-    const parts = fromLegacy
+  const tabCodes = firstValue(searchParams.c);
+  if (tabCodes) {
+    const parts = tabCodes
       .split(",")
       .map((code) => normalizeCountryCode(code))
       .filter((code): code is string => Boolean(code));
@@ -79,7 +79,7 @@ export default async function CountriesPage({
 
   const resolvedSearchParams = searchParams ? await searchParams : {};
 
-  const context = await getLegacyServerContext();
+  const context = await getServerContext();
   const server = context.servers.find((entry) => entry.serverId === serverId);
   if (!server) {
     notFound();

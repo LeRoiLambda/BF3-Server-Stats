@@ -14,10 +14,6 @@ export type ServerSection = (typeof SERVER_SECTIONS)[number];
 export const SERVER_NAV_SECTIONS: ReadonlyArray<Exclude<ServerSection, "home">> =
   ["leaders", "suspicious", "countries", "maps", "server", "chat", "bans"];
 
-export function isServerSection(value: string): value is ServerSection {
-  return SERVER_SECTIONS.includes(value as ServerSection);
-}
-
 export function sectionLabel(section: ServerSection): string {
   switch (section) {
     case "home":
