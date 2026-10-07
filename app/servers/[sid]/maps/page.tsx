@@ -7,8 +7,6 @@ import { getServerMapsSnapshot } from "@/src/server/repositories/maps-repository
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type MapsPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -163,7 +161,11 @@ export default async function MapsPage({ params, searchParams }: MapsPageProps) 
                         <td className={ui.td}>{map.mapCode}</td>
                         <td className={ui.td}>{map.numberOfRounds}</td>
                         <td className={ui.td}>{map.averagePlayers.toFixed(2)}</td>
-                        <td className={ui.td}>{map.averagePopularity.toFixed(2)}%</td>
+                        <td className={ui.td}>
+                          {map.joinsPerLeavePercent === null
+                            ? "-"
+                            : `${map.joinsPerLeavePercent.toFixed(2)}%`}
+                        </td>
                       </tr>
                     ))
                   )}

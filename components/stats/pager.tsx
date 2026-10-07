@@ -55,13 +55,18 @@ function buildPageItems(page: number, totalPages: number): PageItem[] {
 
 function buildOpenPageItems(page: number, hasNextPage: boolean): PageItem[] {
   const start = Math.max(1, page - 2);
-  const end = page + (hasNextPage ? 2 : 0);
+  // Without a total, only the page after this one is known to exist.
+  const end = page + (hasNextPage ? 1 : 0);
   const pages = Array.from(
     { length: end - start + 1 },
     (_, index) => start + index
   );
 
-  return start > 1 ? [1, "gap-start", ...pages] : pages;
+  if (start > 2) {
+    return [1, "gap-start", ...pages];
+  }
+
+  return start === 2 ? [1, ...pages] : pages;
 }
 
 function pagerLinkClass(disabled = false, active = false): string {

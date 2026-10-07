@@ -12,9 +12,8 @@ import {
 import {
   getAllServersWeeklyLeaderboard
 } from "@/src/server/repositories/player-stats-repository";
+import { isServerOnline } from "@/src/server/repositories/server-repository";
 import { getAllServersPageScope } from "@/src/server/routing/server-pages";
-
-export const revalidate = 30;
 
 function occupancyPercent(usedSlots: number, maxSlots: number): number {
   if (maxSlots <= 0) {
@@ -31,9 +30,7 @@ export default async function AllServersHomePage() {
     gameId: scope.gameId,
     limit: 20
   });
-  const onlineServers = scope.context.servers.filter(
-    (server) => server.connectionState === "on"
-  ).length;
+  const onlineServers = scope.context.servers.filter(isServerOnline).length;
   const playersOnline = scope.context.servers.reduce(
     (sum, server) => sum + server.usedSlots,
     0
@@ -66,7 +63,7 @@ export default async function AllServersHomePage() {
 
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {scope.context.servers.map((server) => {
-            const isOnline = server.connectionState === "on";
+            const isOnline = isServerOnline(server);
             const loadPercent = occupancyPercent(server.usedSlots, server.maxSlots);
             const serverMapImagePath = mapImagePath(server.mapName);
 

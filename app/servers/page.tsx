@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 
-export const revalidate = 30;
-
 export default async function ServersPage() {
   const context = await getLegacyServerContext();
 

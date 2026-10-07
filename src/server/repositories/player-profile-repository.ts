@@ -1,6 +1,15 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
+import {
+  containsPattern,
+  searchableText,
+  startsWithPattern
+} from "@/src/server/db/search";
+import {
+  buildServerScopeCondition,
+  type ServerScopeCondition
+} from "@/src/server/repositories/server-scope";
 import { toFixedNumber } from "@/src/server/utils/numbers";
 import { toDateTimeString } from "@/src/server/utils/dates";
 
@@ -28,6 +37,7 @@ export type PlayerProfile = {
   lastSeenOnServer: string | null;
   banStatus: "active" | "expired" | null;
   banReason: string | null;
+  hasStats: boolean;
 };
 
 export type PlayerRankPositions = {
@@ -86,6 +96,7 @@ type PlayerProfileRow = RowDataPacket & {
   soldierName: string;
   countryCode: string | null;
   globalRank: number | null;
+  statsRows: number;
   suicides: number | null;
   score: number | null;
   kills: number | null;
@@ -149,16 +160,21 @@ type PlayerRankPositionRow = RowDataPacket & {
   rankPosition: number | null;
 };
 
-export type PlayerProfileInput = {
-  playerId: number;
-  gameId: number;
+// A null serverId means all servers the site lists (serverIds); hidden servers
+// are never included.
+type PlayerServerScopeInput = {
   serverId: number | null;
+  serverIds: number[];
 };
 
-export type PlayerSearchInput = {
+export type PlayerProfileInput = PlayerServerScopeInput & {
+  playerId: number;
+  gameId: number;
+};
+
+export type PlayerSearchInput = PlayerServerScopeInput & {
   query: string;
   gameId: number;
-  serverId: number | null;
   limit: number;
 };
 
@@ -193,18 +209,23 @@ function normalizeQuery(value: string): string {
   return value.trim();
 }
 
+function playerServerScope(input: PlayerServerScopeInput): ServerScopeCondition {
+  return buildServerScopeCondition(
+    "tsp.ServerID",
+    input.serverId !== null
+      ? { serverId: input.serverId }
+      : { serverIds: input.serverIds }
+  );
+}
+
 function buildPlayerRankAggregateSql(
   input: PlayerProfileInput,
   metricSql: string,
   targetOnly: boolean
 ): { sql: string; params: Array<number | string> } {
-  const whereParts = ["tpd.GameID = ?"];
-  const params: Array<number | string> = [input.gameId];
-
-  if (input.serverId !== null) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId);
-  }
+  const scope = playerServerScope(input);
+  const whereParts = ["tpd.GameID = ?", scope.sql];
+  const params: Array<number | string> = [input.gameId, ...scope.params];
 
   if (targetOnly) {
     whereParts.push("tpd.PlayerID = ?");
@@ -229,13 +250,9 @@ function buildPlayerRankAggregateSql(
 
 async function countRankedPlayers(input: PlayerProfileInput): Promise<number> {
   const pool = getDbPool();
-  const whereParts = ["tpd.GameID = ?"];
-  const params: Array<number | string> = [input.gameId];
-
-  if (input.serverId !== null) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId);
-  }
+  const scope = playerServerScope(input);
+  const whereParts = ["tpd.GameID = ?", scope.sql];
+  const params: Array<number | string> = [input.gameId, ...scope.params];
 
   const [rows] = await pool.query<PlayerRankTotalRow[]>(
     `
@@ -302,38 +319,17 @@ export async function getPlayerProfileById(
   const adkatsReasonField =
     adkats.bans && adkats.records ? ", abr.record_message AS banReason" : "";
 
-  const hasServerScope = input.serverId !== null;
-  const aggregateScore = hasServerScope ? "tps.Score" : "SUM(tps.Score)";
-  const aggregateKills = hasServerScope ? "tps.Kills" : "SUM(tps.Kills)";
-  const aggregateDeaths = hasServerScope ? "tps.Deaths" : "SUM(tps.Deaths)";
-  const aggregateHeadshots = hasServerScope ? "tps.Headshots" : "SUM(tps.Headshots)";
-  const aggregateSuicides = hasServerScope ? "tps.Suicide" : "SUM(tps.Suicide)";
-  const aggregateTeamKills = hasServerScope ? "tps.TKs" : "SUM(tps.TKs)";
-  const aggregateRounds = hasServerScope ? "tps.Rounds" : "SUM(tps.Rounds)";
-  const aggregateKillstreak = hasServerScope ? "tps.Killstreak" : "MAX(tps.Killstreak)";
-  const aggregateDeathstreak = hasServerScope
-    ? "tps.Deathstreak"
-    : "MAX(tps.Deathstreak)";
-  const aggregateWins = hasServerScope ? "tps.Wins" : "SUM(tps.Wins)";
-  const aggregateLosses = hasServerScope ? "tps.Losses" : "SUM(tps.Losses)";
-  const aggregateHighScore = hasServerScope ? "tps.HighScore" : "MAX(tps.HighScore)";
-  const aggregateFirstSeen = hasServerScope
-    ? "tps.FirstSeenOnServer"
-    : "MIN(tps.FirstSeenOnServer)";
-  const aggregateLastSeen = hasServerScope
-    ? "tps.LastSeenOnServer"
-    : "MAX(tps.LastSeenOnServer)";
+  const scope = playerServerScope(input);
+  const adkatsGroupBy = [
+    adkats.bans ? "adk.ban_status" : null,
+    adkats.bans && adkats.records ? "abr.record_message" : null
+  ]
+    .filter(Boolean)
+    .map((column) => `, ${column}`)
+    .join("");
 
-  const whereParts = ["tpd.PlayerID = ?", "tpd.GameID = ?"];
-  const params: Array<number | string> = [input.playerId, input.gameId];
-
-  if (hasServerScope) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId as number);
-  }
-
-  const groupBy = hasServerScope ? "" : "GROUP BY tpd.PlayerID";
-
+  // Starts from tbl_playerdata, so a player without stats in the scope still
+  // has a profile.
   const [rows] = await pool.query<PlayerProfileRow[]>(
     `
       SELECT
@@ -341,35 +337,37 @@ export async function getPlayerProfileById(
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
         tpd.GlobalRank AS globalRank,
-        ${aggregateSuicides} AS suicides,
-        ${aggregateScore} AS score,
-        ${aggregateKills} AS kills,
-        ${aggregateDeaths} AS deaths,
-        (${aggregateKills} / NULLIF(${aggregateDeaths}, 0)) AS kdr,
-        ((${aggregateHeadshots} / NULLIF(${aggregateKills}, 0)) * 100) AS hsr,
-        ${aggregateTeamKills} AS teamKills,
-        ${aggregateHeadshots} AS headshots,
-        ${aggregateRounds} AS rounds,
-        ${aggregateKillstreak} AS killstreak,
-        ${aggregateDeathstreak} AS deathstreak,
-        ${aggregateWins} AS wins,
-        ${aggregateLosses} AS losses,
-        (${aggregateWins} / NULLIF(${aggregateLosses}, 0)) AS wlr,
-        ${aggregateHighScore} AS highScore,
-        ${aggregateFirstSeen} AS firstSeenOnServer,
-        ${aggregateLastSeen} AS lastSeenOnServer
+        COUNT(tps.StatsID) AS statsRows,
+        SUM(tps.Suicide) AS suicides,
+        SUM(tps.Score) AS score,
+        SUM(tps.Kills) AS kills,
+        SUM(tps.Deaths) AS deaths,
+        (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
+        ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr,
+        SUM(tps.TKs) AS teamKills,
+        SUM(tps.Headshots) AS headshots,
+        SUM(tps.Rounds) AS rounds,
+        MAX(tps.Killstreak) AS killstreak,
+        MAX(tps.Deathstreak) AS deathstreak,
+        SUM(tps.Wins) AS wins,
+        SUM(tps.Losses) AS losses,
+        (SUM(tps.Wins) / NULLIF(SUM(tps.Losses), 0)) AS wlr,
+        MAX(tps.HighScore) AS highScore,
+        MIN(tps.FirstSeenOnServer) AS firstSeenOnServer,
+        MAX(tps.LastSeenOnServer) AS lastSeenOnServer
         ${adkatsFields}
         ${adkatsReasonField}
-      FROM tbl_playerstats tps
-      INNER JOIN tbl_server_player tsp ON tsp.StatsID = tps.StatsID
-      INNER JOIN tbl_playerdata tpd ON tsp.PlayerID = tpd.PlayerID
+      FROM tbl_playerdata tpd
+      LEFT JOIN tbl_server_player tsp ON tsp.PlayerID = tpd.PlayerID AND ${scope.sql}
+      LEFT JOIN tbl_playerstats tps ON tps.StatsID = tsp.StatsID
       ${adkatsJoin}
       ${adkatsRecordsJoin}
-      WHERE ${whereParts.join(" AND ")}
-      ${groupBy}
+      WHERE tpd.PlayerID = ?
+        AND tpd.GameID = ?
+      GROUP BY tpd.PlayerID, tpd.SoldierName, tpd.CountryCode, tpd.GlobalRank ${adkatsGroupBy}
       LIMIT 1
     `,
-    params
+    [...scope.params, input.playerId, input.gameId]
   );
 
   const row = rows[0];
@@ -403,7 +401,8 @@ export async function getPlayerProfileById(
     firstSeenOnServer: toDateTimeString(row.firstSeenOnServer),
     lastSeenOnServer: toDateTimeString(row.lastSeenOnServer),
     banStatus: parseBanStatus(row.banStatus),
-    banReason: row.banReason ?? null
+    banReason: row.banReason ?? null,
+    hasStats: Number(row.statsRows ?? 0) > 0
   };
 }
 
@@ -429,13 +428,9 @@ export async function listPlayerWeapons(
   input: PlayerProfileInput
 ): Promise<PlayerWeapon[]> {
   const pool = getDbPool();
-  const whereParts = ["tsp.PlayerID = ?", "tpd.GameID = ?"];
-  const params: Array<number> = [input.playerId, input.gameId];
-
-  if (input.serverId !== null) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId);
-  }
+  const scope = playerServerScope(input);
+  const whereParts = ["tsp.PlayerID = ?", "tpd.GameID = ?", scope.sql];
+  const params: Array<number> = [input.playerId, input.gameId, ...scope.params];
 
   const [rows] = await pool.query<PlayerWeaponRow[]>(
     `
@@ -475,12 +470,9 @@ export async function listPlayerWeapons(
   }));
 }
 
-export async function listPlayerDogtagLosses(input: {
-  playerId: number;
-  gameId: number;
-  serverId: number | null;
-  limit?: number;
-}): Promise<PlayerDogtagLossResult> {
+export async function listPlayerDogtagLosses(
+  input: PlayerProfileInput & { limit?: number }
+): Promise<PlayerDogtagLossResult> {
   const dogtagsAvailable = await hasTable("tbl_dogtags");
   if (!dogtagsAvailable) {
     return {
@@ -492,13 +484,9 @@ export async function listPlayerDogtagLosses(input: {
   const pool = getDbPool();
   const adkatsAvailable = await hasTable("adkats_bans");
   const safeLimit = Math.max(1, Math.min(50, Math.floor(input.limit ?? 20)));
-  const whereParts = ["tpd2.PlayerID = ?", "tpd2.GameID = ?"];
-  const params: Array<number> = [input.playerId, input.gameId];
-
-  if (input.serverId !== null) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId);
-  }
+  const scope = playerServerScope(input);
+  const whereParts = ["tpd2.PlayerID = ?", "tpd2.GameID = ?", scope.sql];
+  const params: Array<number> = [input.playerId, input.gameId, ...scope.params];
 
   params.push(safeLimit);
 
@@ -534,12 +522,9 @@ export async function listPlayerDogtagLosses(input: {
   };
 }
 
-export async function listPlayerDogtagCollections(input: {
-  playerId: number;
-  gameId: number;
-  serverId: number | null;
-  limit?: number;
-}): Promise<PlayerDogtagCollectionResult> {
+export async function listPlayerDogtagCollections(
+  input: PlayerProfileInput & { limit?: number }
+): Promise<PlayerDogtagCollectionResult> {
   const dogtagsAvailable = await hasTable("tbl_dogtags");
   if (!dogtagsAvailable) {
     return {
@@ -551,13 +536,9 @@ export async function listPlayerDogtagCollections(input: {
   const pool = getDbPool();
   const adkatsAvailable = await hasTable("adkats_bans");
   const safeLimit = Math.max(1, Math.min(50, Math.floor(input.limit ?? 20)));
-  const whereParts = ["tpd.PlayerID = ?", "tpd.GameID = ?"];
-  const params: Array<number> = [input.playerId, input.gameId];
-
-  if (input.serverId !== null) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId);
-  }
+  const scope = playerServerScope(input);
+  const whereParts = ["tpd.PlayerID = ?", "tpd.GameID = ?", scope.sql];
+  const params: Array<number> = [input.playerId, input.gameId, ...scope.params];
 
   params.push(safeLimit);
 
@@ -604,15 +585,20 @@ export async function searchPlayersByName(
   const pool = getDbPool();
   const adkatsAvailable = await hasTable("adkats_bans");
 
-  const whereParts = ["tpd.GameID = ?", "tpd.SoldierName LIKE ?"];
-  const params: Array<number | string> = [input.gameId, `%${query}%`];
-
-  if (input.serverId !== null) {
-    whereParts.push("tsp.ServerID = ?");
-    params.push(input.serverId);
-  }
-
-  params.push(Math.max(1, Math.min(100, Math.floor(input.limit))));
+  const scope = playerServerScope(input);
+  const whereParts = [
+    "tpd.GameID = ?",
+    `${searchableText("tpd.SoldierName")} LIKE ?`,
+    scope.sql
+  ];
+  const params: Array<number | string> = [
+    input.gameId,
+    containsPattern(query),
+    ...scope.params,
+    query,
+    startsWithPattern(query),
+    Math.max(1, Math.min(100, Math.floor(input.limit)))
+  ];
 
   const [rows] = await pool.query<PlayerSearchRow[]>(
     `
@@ -630,7 +616,11 @@ export async function searchPlayersByName(
       ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
       WHERE ${whereParts.join(" AND ")}
       GROUP BY tpd.PlayerID
-      ORDER BY score DESC, tpd.SoldierName ASC
+      ORDER BY
+        ${searchableText("tpd.SoldierName")} = ? DESC,
+        ${searchableText("tpd.SoldierName")} LIKE ? DESC,
+        score DESC,
+        tpd.SoldierName ASC
       LIMIT ?
     `,
     params

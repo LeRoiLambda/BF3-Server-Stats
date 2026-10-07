@@ -23,8 +23,6 @@ import {
   nextOrder
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersBansPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -54,7 +52,8 @@ export default async function AllServersBansPage({
       pageSize: 20
     }),
     getModerationPolicy({
-      serverId: null
+      serverId: null,
+      activeServerIds: scope.serverIds
     })
   ]);
 
@@ -119,7 +118,7 @@ export default async function AllServersBansPage({
                           </PlayerTableCellLink>
                         </td>
                         <td className={ui.td}>
-                          <PlayerTableCellLink playerId={player.playerId}>
+                          <PlayerTableCellLink playerId={player.playerId} primary>
                             <PlayerIdentity
                               soldierName={player.soldierName}
                               countryCode={player.countryCode}

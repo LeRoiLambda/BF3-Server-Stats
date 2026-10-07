@@ -20,8 +20,6 @@ import {
 } from "@/src/server/repositories/bans-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type BansPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -85,7 +83,8 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
       pageSize: 20
     }),
     getModerationPolicy({
-      serverId: server.serverId
+      serverId: server.serverId,
+      activeServerIds: context.servers.map((entry) => entry.serverId)
     })
   ]);
 
@@ -166,6 +165,7 @@ export default async function BansPage({ params, searchParams }: BansPageProps) 
                           <PlayerTableCellLink
                             playerId={player.playerId}
                             serverId={server.serverId}
+                            primary
                           >
                             <PlayerIdentity
                               soldierName={player.soldierName}

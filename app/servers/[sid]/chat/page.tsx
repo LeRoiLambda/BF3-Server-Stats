@@ -22,8 +22,6 @@ import {
 } from "@/src/server/repositories/chat-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type ChatPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -171,7 +169,7 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                 result.entries.map((entry, index) => (
                   <tr
                     key={entry.id}
-                    className={playerTableRowClass(ui.tableRow)}
+                    className={playerTableRowClass(ui.tableRow, entry.playerId !== null)}
                   >
                     <td className={ui.td}>
                       <PlayerTableCellLink
@@ -193,6 +191,7 @@ export default async function ChatPage({ params, searchParams }: ChatPageProps) 
                       <PlayerTableCellLink
                         playerId={entry.playerId}
                         serverId={server.serverId}
+                        primary
                       >
                         <PlayerIdentity
                           soldierName={entry.soldierName}

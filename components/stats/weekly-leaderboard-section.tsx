@@ -237,7 +237,7 @@ function WeeklyLeaderboardTable({
                 </PlayerTableCellLink>
               </td>
               <td className={ui.td}>
-                <PlayerTableCellLink playerId={player.playerId} serverId={serverId}>
+                <PlayerTableCellLink playerId={player.playerId} serverId={serverId} primary>
                   <PlayerIdentity
                     soldierName={player.soldierName}
                     countryCode={player.countryCode}

@@ -1,7 +1,8 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
-import { toDateTimeString } from "@/src/server/utils/dates";
+import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
+import { parseUtcDateTime, toDateTimeString } from "@/src/server/utils/dates";
 
 export type ModerationStatusKind = "none" | "activeBan" | "expiredBan";
 export type ModerationBanDuration = "permanent" | "temporary" | null;
@@ -74,14 +75,18 @@ export type PlayerModerationSummary = {
   recentActions: ModerationAction[];
 };
 
+// activeServerIds are the servers the site lists; AdKats settings come only
+// from those.
 export type PlayerModerationInput = {
   playerId: number;
   serverId: number | null;
+  activeServerIds: number[];
   recentLimit?: number;
 };
 
 export type ModerationPolicyInput = {
   serverId: number | null;
+  activeServerIds: number[];
 };
 
 export type ModerationPolicy = {
@@ -260,15 +265,6 @@ function activeBanLabel(duration: ModerationBanDuration): string {
   return "Active ban";
 }
 
-function toDate(value: string | Date | null | undefined): Date | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function parseBoolean(value: string | null | undefined, defaultValue: boolean): boolean {
   if (value === null || value === undefined) {
     return defaultValue;
@@ -412,7 +408,8 @@ function buildMuteStatus(row: RecordRow | undefined): ModerationMuteStatus {
   }
 
   const durationMinutes = Number(row.commandNumeric ?? 0);
-  const startedAt = toDate(row.recordTime);
+  // AdKats writes record_time in UTC.
+  const startedAt = parseUtcDateTime(row.recordTime);
   if (!startedAt || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     return DEFAULT_MUTE_STATUS;
   }
@@ -520,6 +517,7 @@ async function getCurrentMuteStatus(
 
 async function listSettingsRows(
   serverId: number | null,
+  activeServerIds: number[],
   availability: ModerationAvailability
 ): Promise<SettingRow[]> {
   if (!availability.settings) {
@@ -548,6 +546,9 @@ async function listSettingsRows(
     }
   }
 
+  const scope = buildServerScopeCondition("server_id", {
+    serverIds: activeServerIds
+  });
   const [rows] = await pool.query<SettingRow[]>(
     `
       SELECT
@@ -555,10 +556,11 @@ async function listSettingsRows(
         setting_name AS settingName,
         setting_value AS settingValue
       FROM adkats_settings
-      WHERE setting_name IN (${namesSql})
+      WHERE ${scope.sql}
+        AND setting_name IN (${namesSql})
       ORDER BY server_id ASC, setting_name ASC
     `,
-    SETTING_NAMES
+    [...scope.params, ...SETTING_NAMES]
   );
 
   return rows;
@@ -692,15 +694,21 @@ function buildLadder(
     return null;
   }
 
+  // As in AdKats: a negative total counts as zero, and totals past the end of
+  // the ladder stay on the last step.
+  const nextIndex =
+    key === "punishment" && totalPoints !== null
+      ? Math.min(Math.max(Math.floor(totalPoints), 0), tokens.length - 1)
+      : null;
   const steps = tokens.map((token, index) => {
-    const isPrimary = key === "punishment" && totalPoints !== null;
-    const state: ModerationLadderStepState = !isPrimary
-      ? "future"
-      : index < totalPoints
-        ? "past"
-        : index === totalPoints
-          ? "next"
-          : "future";
+    const state: ModerationLadderStepState =
+      nextIndex === null
+        ? "future"
+        : index < nextIndex
+          ? "past"
+          : index === nextIndex
+            ? "next"
+            : "future";
 
     return {
       index,
@@ -1066,7 +1074,7 @@ export async function getPlayerModerationSummary(
   const [currentStatus, muteStatus, settingsRows] = await Promise.all([
     getCurrentStatus(input.playerId, availability),
     getCurrentMuteStatus(input, availability),
-    listSettingsRows(input.serverId, availability)
+    listSettingsRows(input.serverId, input.activeServerIds, availability)
   ]);
   const initialSettings = parseSettings(settingsRows, input.serverId, null);
   const points = await getInfractionPoints(
@@ -1101,7 +1109,11 @@ export async function getModerationPolicy(
     };
   }
 
-  const settingsRows = await listSettingsRows(input.serverId, availability);
+  const settingsRows = await listSettingsRows(
+    input.serverId,
+    input.activeServerIds,
+    availability
+  );
   const settings = parseSettings(settingsRows, input.serverId, null);
 
   return {

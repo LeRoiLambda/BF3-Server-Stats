@@ -51,7 +51,6 @@ export async function GET(request: NextRequest) {
 
   const suggestions = await searchChatSuggestions({
     query: term,
-    gameId: context.gameId,
     ...(serverId === null
       ? { serverIds: context.servers.map((server) => server.serverId) }
       : { serverId }),

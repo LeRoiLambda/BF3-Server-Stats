@@ -27,8 +27,6 @@ import {
   nextOrder
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersLeadersPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -183,7 +181,7 @@ export default async function AllServersLeadersPage({
                         </PlayerTableCellLink>
                       </td>
                       <td className={ui.td}>
-                        <PlayerTableCellLink playerId={player.playerId}>
+                        <PlayerTableCellLink playerId={player.playerId} primary>
                           <PlayerIdentity
                             soldierName={player.soldierName}
                             countryCode={player.countryCode}

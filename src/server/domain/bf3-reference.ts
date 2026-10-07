@@ -271,16 +271,18 @@ export function rankImagePath(rank: number | null): string {
 }
 
 export function formatCountryName(code: string | null): string {
-  if (!code) {
+  // GeoIP pseudo-codes such as "A1" (anonymous proxy) are not region codes, and
+  // Intl.DisplayNames.of() throws a RangeError for them.
+  const normalizedCode = normalizeCountryCode(code);
+  if (!normalizedCode || normalizedCode === "--") {
     return "Unknown";
   }
 
-  const normalizedCode = code.toUpperCase();
-  if (normalizedCode === "--") {
-    return "Unknown";
+  try {
+    return regionNames.of(normalizedCode) ?? normalizedCode;
+  } catch {
+    return normalizedCode;
   }
-
-  return regionNames.of(normalizedCode) ?? normalizedCode;
 }
 
 export function normalizeCountryCode(value: string | null): string | null {

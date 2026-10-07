@@ -25,8 +25,6 @@ import {
   nextOrder
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersChatPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -125,7 +123,10 @@ export default async function AllServersChatPage({
                 </tr>
               ) : (
                 result.entries.map((entry, index) => (
-                  <tr key={entry.id} className={playerTableRowClass(ui.tableRow)}>
+                  <tr
+                    key={entry.id}
+                    className={playerTableRowClass(ui.tableRow, entry.playerId !== null)}
+                  >
                     <td className={ui.td}>
                       <PlayerTableCellLink playerId={entry.playerId}>
                         {(result.page - 1) * result.pageSize + index + 1}
@@ -137,7 +138,7 @@ export default async function AllServersChatPage({
                       </PlayerTableCellLink>
                     </td>
                     <td className={`${ui.td} whitespace-nowrap`}>
-                      <PlayerTableCellLink playerId={entry.playerId}>
+                      <PlayerTableCellLink playerId={entry.playerId} primary>
                         <PlayerIdentity
                           soldierName={entry.soldierName}
                           countryCode={entry.countryCode}

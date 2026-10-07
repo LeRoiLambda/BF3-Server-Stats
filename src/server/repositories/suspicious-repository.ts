@@ -50,9 +50,13 @@ type CountRow = RowDataPacket & {
   totalRows: number;
 };
 
+// Zero deaths count as one, so a player who never died has a KDR equal to
+// their kills.
+const KDR_SQL = "(SUM(tps.Kills) / GREATEST(SUM(tps.Deaths), 1))";
+
 const SORT_SQL: Record<SuspiciousSort, string> = {
   soldierName: "tpd.SoldierName",
-  kdr: "COALESCE((SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)), 0)",
+  kdr: `COALESCE(${KDR_SQL}, 0)`,
   hsr: "COALESCE(((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100), 0)",
   rounds: "COALESCE(SUM(tps.Rounds), 0)"
 };
@@ -60,13 +64,13 @@ const SORT_SQL: Record<SuspiciousSort, string> = {
 const SUSPICIOUS_HAVING_SQL = `
   (
     (
-      (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) > 5
+      ${KDR_SQL} > 5
       AND (SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) > 0.70
       AND SUM(tps.Kills) > 30
       AND SUM(tps.Rounds) > 1
     )
     OR (
-      (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) > 10
+      ${KDR_SQL} > 10
       AND SUM(tps.Kills) > 50
       AND SUM(tps.Rounds) > 1
     )
@@ -183,7 +187,7 @@ export async function getSuspiciousPlayers(
         tpd.SoldierName AS soldierName,
         tpd.CountryCode AS countryCode,
         SUM(tps.Rounds) AS rounds,
-        (SUM(tps.Kills) / NULLIF(SUM(tps.Deaths), 0)) AS kdr,
+        ${KDR_SQL} AS kdr,
         ((SUM(tps.Headshots) / NULLIF(SUM(tps.Kills), 0)) * 100) AS hsr
         ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
       FROM tbl_playerstats tps

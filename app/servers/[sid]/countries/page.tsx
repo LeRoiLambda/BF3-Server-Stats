@@ -16,8 +16,6 @@ import { getServerCountriesSnapshot } from "@/src/server/repositories/countries-
 import { getLegacyServerContext } from "@/src/server/repositories/server-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type CountriesPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -191,6 +189,7 @@ export default async function CountriesPage({
                           <PlayerTableCellLink
                             playerId={player.playerId}
                             serverId={server.serverId}
+                            primary
                           >
                             <PlayerIdentity
                               soldierName={player.soldierName}

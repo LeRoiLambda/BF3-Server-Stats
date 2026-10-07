@@ -19,8 +19,6 @@ import {
 } from "@/src/server/repositories/suspicious-repository";
 import { firstValue, parsePositiveInt } from "@/src/server/routing/params";
 
-export const revalidate = 30;
-
 type SuspiciousPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -151,6 +149,7 @@ export default async function SuspiciousPage({
                       <PlayerTableCellLink
                         playerId={player.playerId}
                         serverId={server.serverId}
+                        primary
                       >
                         <PlayerIdentity
                           soldierName={player.soldierName}

@@ -15,6 +15,9 @@ export function getDbPool(): Pool {
     user: env.BF3_STATS_DB_USER,
     password: env.BF3_STATS_DB_PASS,
     database: env.BF3_STATS_DB_NAME,
+    // DATETIME values carry no time zone (logger: Procon host clock; AdKats:
+    // UTC), so they are returned as the stored strings.
+    dateStrings: true,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0

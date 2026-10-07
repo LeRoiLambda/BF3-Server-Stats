@@ -23,8 +23,6 @@ import {
 } from "@/src/server/repositories/player-stats-repository";
 import { listTeamScores } from "@/src/server/repositories/server-overview-repository";
 
-export const revalidate = 30;
-
 type ServerHomePageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -269,7 +267,10 @@ export default async function ServerHomePage({
                             players.map((player, index) => (
                               <tr
                                 key={`${teamId}-${player.soldierName}`}
-                                className={playerTableRowClass(ui.tableRow)}
+                                className={playerTableRowClass(
+                                  ui.tableRow,
+                                  player.playerId !== null
+                                )}
                               >
                                 <td className={ui.td}>
                                   <PlayerTableCellLink
@@ -283,6 +284,7 @@ export default async function ServerHomePage({
                                   <PlayerTableCellLink
                                     playerId={player.playerId}
                                     serverId={server.serverId}
+                                    primary
                                   >
                                     <PlayerIdentity
                                       soldierName={player.soldierName}

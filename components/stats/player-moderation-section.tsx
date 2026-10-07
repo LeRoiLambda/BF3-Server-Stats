@@ -97,6 +97,11 @@ export function PlayerModerationSection({ summary }: PlayerModerationSectionProp
                   {summary.muteStatus.endsAt ? ` - until ${summary.muteStatus.endsAt}` : ""}
                 </p>
               ) : null}
+              {summary.muteStatus.active && summary.muteStatus.detail ? (
+                <p className="mt-1 break-words text-xs text-slate-300">
+                  Reason: {summary.muteStatus.detail}
+                </p>
+              ) : null}
             </div>
             <div className="border-b border-slate-700/60 p-3 md:border-b-0 md:border-r">
               <p className="text-xs uppercase tracking-[0.12em] text-slate-400">

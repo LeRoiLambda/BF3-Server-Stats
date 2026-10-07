@@ -1,8 +1,15 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
-import { hasTable } from "@/src/server/db/schema";
+import { hasColumn, hasTable } from "@/src/server/db/schema";
+import { containsPattern, searchableText } from "@/src/server/db/search";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toDateTimeString } from "@/src/server/utils/dates";
+import { loggerWallClock } from "@/src/server/utils/logger-clock";
+import {
+  formatSqlDateTime,
+  naiveDateToWallClock,
+  wallClockToNaiveDate
+} from "@/src/server/utils/time-zones";
 
 export type ChatSort = "date" | "soldierName" | "message";
 export type ChatOrder = "asc" | "desc";
@@ -27,7 +34,7 @@ export type ChatLogEntry = {
   countryCode: string | null;
   message: string;
   subset: string | null;
-  playerId: number;
+  playerId: number | null;
   banStatus: "active" | "expired" | null;
 };
 
@@ -48,7 +55,6 @@ export type ChatSearchSuggestion = {
 export type ChatSearchSuggestionInput = {
   serverId?: number;
   serverIds?: number[];
-  gameId: number;
   query: string;
   limit: number;
 };
@@ -67,22 +73,42 @@ type ChatPageIdRow = RowDataPacket & {
   id: number;
 };
 
+type ChatCountRow = RowDataPacket & {
+  totalRows: number;
+};
+
 type ChatRow = RowDataPacket & {
   id: number;
   serverId: number;
   serverName: string | null;
   logDate: string;
-  soldierName: string;
+  soldierName: string | null;
   countryCode: string | null;
   message: string;
   subset: string | null;
-  playerId: number;
+  playerId: number | null;
   banStatus?: string | null;
 };
 
 type ChatSuggestionRow = RowDataPacket & {
   value: string | null;
   lastSeen: string | null;
+};
+
+// Highest ?page= served, which keeps LIMIT/OFFSET within MySQL's range.
+const MAX_CHAT_PAGE = 1_000_000;
+
+const DATE_QUERY_PATTERN =
+  /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/;
+const CURRENT_OR_LAST_PERIOD_PATTERN = /^(this|last) (week|month|year)$/;
+const PERIODS_AGO_PATTERN = /^(\d{1,3}) (day|week|month|year)s? ago$/;
+
+type CalendarPeriod = "day" | "week" | "month" | "year";
+
+// Wall-clock range held in Dates whose UTC fields are the wall-clock fields.
+type WallClockRange = {
+  low: Date;
+  high: Date;
 };
 
 const SORT_SQL: Record<ChatSort, string> = {
@@ -111,7 +137,7 @@ function normalizePage(value: number): number {
     return 1;
   }
 
-  return Math.floor(value);
+  return Math.min(Math.floor(value), MAX_CHAT_PAGE);
 }
 
 function normalizeQuery(value: string | null): string | null {
@@ -123,79 +149,165 @@ function normalizeQuery(value: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
+function addSeconds(date: Date, seconds: number): Date {
+  return new Date(date.getTime() + seconds * 1000);
 }
 
-function toSqlMinuteString(date: Date): string {
-  return [
-    date.getFullYear(),
-    "-",
-    pad2(date.getMonth() + 1),
-    "-",
-    pad2(date.getDate()),
-    " ",
-    pad2(date.getHours()),
-    ":",
-    pad2(date.getMinutes())
-  ].join("");
+function startOfPeriod(date: Date, period: CalendarPeriod): Date {
+  const start = new Date(Date.UTC(
+    date.getUTCFullYear(),
+    period === "year" ? 0 : date.getUTCMonth(),
+    period === "month" || period === "year" ? 1 : date.getUTCDate()
+  ));
+
+  if (period === "week") {
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+  }
+
+  return start;
 }
 
-function dayStartWithMinute(date: Date): Date {
-  const next = new Date(date);
-  next.setHours(0, 1, 0, 0);
-  return next;
+function shiftPeriod(date: Date, period: CalendarPeriod, amount: number): Date {
+  const shifted = new Date(date);
+
+  switch (period) {
+    case "day":
+      shifted.setUTCDate(shifted.getUTCDate() + amount);
+      break;
+    case "week":
+      shifted.setUTCDate(shifted.getUTCDate() + amount * 7);
+      break;
+    case "month":
+      shifted.setUTCMonth(shifted.getUTCMonth() + amount);
+      break;
+    case "year":
+      shifted.setUTCFullYear(shifted.getUTCFullYear() + amount);
+      break;
+  }
+
+  return shifted;
 }
 
-function dayEndWithMinute(date: Date): Date {
-  const next = new Date(date);
-  next.setHours(23, 59, 0, 0);
-  return next;
+// The whole calendar period (Monday-based for weeks) `periodsAgo` periods
+// before the one containing `now`.
+function calendarPeriodRange(
+  now: Date,
+  period: CalendarPeriod,
+  periodsAgo: number
+): WallClockRange {
+  const low = shiftPeriod(startOfPeriod(now, period), period, -periodsAgo);
+
+  return {
+    low,
+    high: addSeconds(shiftPeriod(low, period, 1), -1)
+  };
 }
 
-export function resolveChatDateRange(query: string | null): ChatDateRange | null {
-  if (!query) {
+// "2024-01-15" matches that day; "2024-01-15 21:30" matches five minutes either
+// side.
+function parseDateQuery(query: string): WallClockRange | null {
+  const match = DATE_QUERY_PATTERN.exec(query);
+  if (!match) {
     return null;
   }
 
-  const parsed = new Date(query);
-  if (Number.isNaN(parsed.getTime())) {
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hasTime = match[4] !== undefined;
+  const hour = hasTime ? Number(match[4]) : 0;
+  const minute = hasTime ? Number(match[5]) : 0;
+  const second = match[6] !== undefined ? Number(match[6]) : 0;
+  const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+
+  // Rejects impossible values such as 2024-02-31 or 25:00.
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day ||
+    date.getUTCHours() !== hour ||
+    date.getUTCMinutes() !== minute ||
+    date.getUTCSeconds() !== second
+  ) {
     return null;
   }
 
-  const now = new Date();
-  const diffSeconds = Math.max(Math.floor((now.getTime() - parsed.getTime()) / 1000), 0);
-  const lowered = query.toLowerCase();
-  let low: Date;
-  let high: Date;
-
-  if (diffSeconds < 3600) {
-    low = new Date(now.getTime() - 3600 * 1000);
-    high = now;
-  } else if (lowered.includes("week")) {
-    low = dayStartWithMinute(parsed);
-    high = dayEndWithMinute(new Date(parsed.getTime() + 6 * 86400 * 1000));
-  } else if (lowered.includes("month")) {
-    low = dayStartWithMinute(parsed);
-    high = dayEndWithMinute(new Date(parsed.getTime() + 30 * 86400 * 1000));
-  } else if (lowered.includes("year")) {
-    low = dayStartWithMinute(parsed);
-    high = dayEndWithMinute(new Date(parsed.getTime() + 365 * 86400 * 1000));
-  } else if (query.includes(":")) {
-    low = new Date(parsed.getTime() - 5 * 60 * 1000);
-    high = new Date(parsed.getTime() + 5 * 60 * 1000);
-  } else {
-    low = dayStartWithMinute(parsed);
-    high = dayEndWithMinute(parsed);
-  }
-
-  if (high.getTime() > now.getTime()) {
-    high = now;
+  if (!hasTime) {
+    return {
+      low: date,
+      high: addSeconds(date, 86400 - 1)
+    };
   }
 
   return {
-    low: toSqlMinuteString(low),
-    high: toSqlMinuteString(high)
+    low: addSeconds(date, -5 * 60),
+    high: addSeconds(date, 5 * 60)
+  };
+}
+
+function parseRelativeDateQuery(query: string, now: Date): WallClockRange | null {
+  const normalized = query.toLowerCase().replace(/\s+/g, " ");
+
+  if (normalized === "now" || normalized === "last hour") {
+    return {
+      low: addSeconds(now, -3600),
+      high: now
+    };
+  }
+
+  if (normalized === "today") {
+    return calendarPeriodRange(now, "day", 0);
+  }
+
+  if (normalized === "yesterday") {
+    return calendarPeriodRange(now, "day", 1);
+  }
+
+  const currentOrLast = CURRENT_OR_LAST_PERIOD_PATTERN.exec(normalized);
+  if (currentOrLast) {
+    return calendarPeriodRange(
+      now,
+      currentOrLast[2] as CalendarPeriod,
+      currentOrLast[1] === "last" ? 1 : 0
+    );
+  }
+
+  const periodsAgo = PERIODS_AGO_PATTERN.exec(normalized);
+  if (periodsAgo) {
+    return calendarPeriodRange(
+      now,
+      periodsAgo[2] as CalendarPeriod,
+      Number(periodsAgo[1])
+    );
+  }
+
+  return null;
+}
+
+// Only queries that parse as dates become date ranges; any other text, such as
+// "ak 47" or "top 10", is matched against names and messages.
+export function resolveChatDateRange(query: string | null): ChatDateRange | null {
+  const normalized = query?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  // Chat times are on the stats logger's clock.
+  const now = wallClockToNaiveDate(loggerWallClock(new Date()));
+  const range =
+    parseDateQuery(normalized) ?? parseRelativeDateQuery(normalized, now);
+  if (!range) {
+    return null;
+  }
+
+  const high =
+    range.low.getTime() <= now.getTime() && range.high.getTime() > now.getTime()
+      ? now
+      : range.high;
+
+  return {
+    low: formatSqlDateTime(naiveDateToWallClock(range.low)),
+    high: formatSqlDateTime(naiveDateToWallClock(high))
   };
 }
 
@@ -263,16 +375,15 @@ export async function searchChatSuggestions(
     );
   }
 
+  const pattern = containsPattern(query);
   const playerParams: Array<string | number> = [
-    input.gameId,
     ...scope.params,
-    `%${query}%`,
+    pattern,
     safeLimit
   ];
   const messageParams: Array<string | number> = [
-    input.gameId,
     ...scope.params,
-    `%${query}%`,
+    pattern,
     safeLimit
   ];
 
@@ -283,9 +394,8 @@ export async function searchChatSuggestions(
           cl.logSoldierName AS value,
           MAX(cl.logDate) AS lastSeen
         FROM tbl_chatlog cl
-        INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
         WHERE ${scope.sql}
-          AND cl.logSoldierName LIKE ?
+          AND ${searchableText("cl.logSoldierName")} LIKE ?
         GROUP BY cl.logSoldierName
         ORDER BY MAX(cl.logDate) DESC, cl.logSoldierName ASC
         LIMIT ?
@@ -298,10 +408,9 @@ export async function searchChatSuggestions(
           TRIM(cl.logMessage) AS value,
           MAX(cl.logDate) AS lastSeen
         FROM tbl_chatlog cl
-        INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
         WHERE ${scope.sql}
           AND TRIM(cl.logMessage) != ''
-          AND cl.logMessage LIKE ?
+          AND ${searchableText("cl.logMessage")} LIKE ?
         GROUP BY TRIM(cl.logMessage)
         ORDER BY MAX(cl.logDate) DESC
         LIMIT ?
@@ -364,44 +473,66 @@ export async function getServerChatLog(
   const pool = getDbPool();
   const sort = normalizeSort(input.sort);
   const order = normalizeOrder(input.order);
-  const page = normalizePage(input.page);
+  let page = normalizePage(input.page);
   const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize)));
   const query = normalizeQuery(input.query);
   const dateRange = resolveChatDateRange(query);
   const scope = buildServerScopeCondition("cl.ServerID", input);
-  const offset = (page - 1) * pageSize;
   const orderBySql = chatOrderBy(sort, order);
 
-  const pageParams: Array<string | number> = [input.gameId, ...scope.params];
-  let pageSql = `
-    SELECT cl.ID AS id
-    FROM tbl_chatlog cl
-    INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
-    WHERE ${scope.sql}
-  `;
+  const filterParams: Array<string | number> = [...scope.params];
+  let filterSql = `WHERE ${scope.sql}`;
 
   if (dateRange) {
-    pageSql += " AND cl.logDate BETWEEN ? AND ? ";
-    pageParams.push(dateRange.low, dateRange.high);
+    filterSql += " AND cl.logDate BETWEEN ? AND ? ";
+    filterParams.push(dateRange.low, dateRange.high);
   } else if (query) {
-    pageSql += `
+    filterSql += `
       AND (
-        cl.logSoldierName LIKE ?
-        OR cl.logMessage LIKE ?
+        ${searchableText("cl.logSoldierName")} LIKE ?
+        OR ${searchableText("cl.logMessage")} LIKE ?
         OR cl.logDate LIKE ?
       )
     `;
-    const pattern = `%${query}%`;
-    pageParams.push(pattern, pattern, pattern);
+    const pattern = containsPattern(query);
+    filterParams.push(pattern, pattern, pattern);
   }
 
-  pageSql += `
-    ORDER BY ${orderBySql}
-    LIMIT ? OFFSET ?
-  `;
-  pageParams.push(pageSize + 1, offset);
+  const fetchPageRows = async (targetPage: number) => {
+    const [rows] = await pool.query<ChatPageIdRow[]>(
+      `
+        SELECT cl.ID AS id
+        FROM tbl_chatlog cl
+        ${filterSql}
+        ORDER BY ${orderBySql}
+        LIMIT ? OFFSET ?
+      `,
+      [...filterParams, pageSize + 1, (targetPage - 1) * pageSize]
+    );
+    return rows;
+  };
 
-  const [pageRows] = await pool.query<ChatPageIdRow[]>(pageSql, pageParams);
+  let pageRows = await fetchPageRows(page);
+  if (pageRows.length === 0 && page > 1) {
+    // A page past the end shows the last page.
+    const [countRows] = await pool.query<ChatCountRow[]>(
+      `
+        SELECT COUNT(*) AS totalRows
+        FROM tbl_chatlog cl
+        ${filterSql}
+      `,
+      filterParams
+    );
+    const lastPage = Math.max(
+      1,
+      Math.ceil(Number(countRows[0]?.totalRows ?? 0) / pageSize)
+    );
+    if (lastPage < page) {
+      page = lastPage;
+      pageRows = await fetchPageRows(page);
+    }
+  }
+
   const hasNextPage = pageRows.length > pageSize;
   const pageIds = pageRows.slice(0, pageSize).map((row) => Number(row.id));
 
@@ -417,33 +548,60 @@ export async function getServerChatLog(
     };
   }
 
-  const adkatsAvailable = await hasTable("adkats_bans");
+  const [adkatsAvailable, loggedPlayerIdAvailable] = await Promise.all([
+    hasTable("adkats_bans"),
+    hasColumn("tbl_chatlog", "logPlayerID")
+  ]);
   const idPlaceholders = pageIds.map(() => "?").join(", ");
   const orderedIdPlaceholders = pageIds.map(() => "?").join(", ");
   const logParams: Array<string | number> = [
     input.gameId,
     ...pageIds,
+    input.gameId,
     ...pageIds
   ];
+  // tbl_chatlog.logPlayerID exists only with AdKats and is NULL for server
+  // messages and for chat sent before a player's first stats upload; such lines
+  // match the speaker by name, and lines without any player are kept.
+  const namedPlayerIdSql = `(
+    SELECT MIN(p.PlayerID)
+    FROM tbl_playerdata p
+    WHERE p.GameID = ?
+      AND p.SoldierName = cl.logSoldierName
+  )`;
   const [rows] = await pool.query<ChatRow[]>(
     `
       SELECT
-        cl.ID AS id,
-        cl.ServerID AS serverId,
+        chat.id,
+        chat.serverId,
         ts.ServerName AS serverName,
-        cl.logDate AS logDate,
-        cl.logSoldierName AS soldierName,
+        chat.logDate,
+        chat.soldierName,
         tpd.CountryCode AS countryCode,
-        TRIM(cl.logMessage) AS message,
-        cl.logSubset AS subset,
-        cl.logPlayerID AS playerId
+        chat.message,
+        chat.subset,
+        tpd.PlayerID AS playerId
       ${adkatsAvailable ? ", adk.ban_status AS banStatus" : ""}
-      FROM tbl_chatlog cl
-      LEFT JOIN tbl_server ts ON ts.ServerID = cl.ServerID
-      INNER JOIN tbl_playerdata tpd ON tpd.PlayerID = cl.logPlayerID AND tpd.GameID = ?
-      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = cl.logPlayerID" : ""}
-      WHERE cl.ID IN (${idPlaceholders})
-      ORDER BY FIELD(cl.ID, ${orderedIdPlaceholders})
+      FROM (
+        SELECT
+          cl.ID AS id,
+          cl.ServerID AS serverId,
+          cl.logDate AS logDate,
+          cl.logSoldierName AS soldierName,
+          TRIM(cl.logMessage) AS message,
+          cl.logSubset AS subset,
+          ${
+            loggedPlayerIdAvailable
+              ? `COALESCE(cl.logPlayerID, ${namedPlayerIdSql})`
+              : namedPlayerIdSql
+          } AS playerId
+        FROM tbl_chatlog cl
+        WHERE cl.ID IN (${idPlaceholders})
+      ) chat
+      LEFT JOIN tbl_server ts ON ts.ServerID = chat.serverId
+      LEFT JOIN tbl_playerdata tpd ON tpd.PlayerID = chat.playerId AND tpd.GameID = ?
+      ${adkatsAvailable ? "LEFT JOIN adkats_bans adk ON adk.player_id = tpd.PlayerID" : ""}
+      ORDER BY FIELD(chat.id, ${orderedIdPlaceholders})
     `,
     logParams
   );
@@ -454,11 +612,11 @@ export async function getServerChatLog(
       serverId: Number(row.serverId),
       serverName: row.serverName ?? null,
       logDate: toDateTimeString(row.logDate) ?? "",
-      soldierName: row.soldierName,
+      soldierName: row.soldierName ?? "",
       countryCode: row.countryCode ?? null,
       message: row.message,
       subset: row.subset ?? null,
-      playerId: Number(row.playerId),
+      playerId: row.playerId === null ? null : Number(row.playerId),
       banStatus:
         row.banStatus === "Active"
           ? "active"

@@ -1,5 +1,6 @@
 import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
+import { hasTable } from "@/src/server/db/schema";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
 import { toDateTimeString } from "@/src/server/utils/dates";
 
@@ -35,6 +36,11 @@ export async function listServerMapRotation(input: {
   serverId?: number;
   serverIds?: number[];
 }): Promise<MapRotationEntry[]> {
+  // adkats_maplist only exists with the LeRoiLambda AdKats fork.
+  if (!(await hasTable("adkats_maplist"))) {
+    return [];
+  }
+
   const pool = getDbPool();
   const scope = buildServerScopeCondition("ml.server_id", input);
   const [rows] = await pool.query<MapRotationRow[]>(

@@ -24,8 +24,6 @@ import {
   type SortOrder
 } from "@/src/server/repositories/player-stats-repository";
 
-export const revalidate = 30;
-
 type LeadersPageProps = {
   params: Promise<{ sid: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -268,6 +266,7 @@ export default async function LeadersPage({
                         <PlayerTableCellLink
                           playerId={player.playerId}
                           serverId={server.serverId}
+                          primary
                         >
                           <PlayerIdentity
                             soldierName={player.soldierName}

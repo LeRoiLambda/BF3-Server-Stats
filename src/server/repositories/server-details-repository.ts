@@ -72,7 +72,7 @@ type ServerRoundSnapshotRow = RowDataPacket & {
 };
 
 type ServerDailyPlayersSnapshotRow = RowDataPacket & {
-  dateValue: string | Date | null;
+  dateValue: string | null;
   averagePlayers: number | null;
   peakPlayers: number | null;
   roundCount: number | null;
@@ -84,24 +84,31 @@ export async function getServerDetailStats(
   const pool = getDbPool();
   const scopeInput = normalizeServerScopeInput(input);
   const scope = buildServerScopeCondition("ServerID", scopeInput);
+  const playerScope = buildServerScopeCondition("tsp.ServerID", scopeInput);
   const hasAllServersScope = (scopeInput.serverIds?.length ?? 0) > 0;
   const [rows] = await pool.query<ServerDetailStatsRow[]>(
     hasAllServersScope
       ? `
         SELECT
-          SUM(CountPlayers) AS countPlayers,
+          MAX(players.countPlayers) AS countPlayers,
           SUM(SumKills) AS totalKills,
           SUM(SumDeaths) AS totalDeaths,
           SUM(SumRounds) AS totalRounds,
-          (SUM(SumScore) / NULLIF(SUM(CountPlayers), 0)) AS averageScore,
-          (SUM(SumKills) / NULLIF(SUM(CountPlayers), 0)) AS averageKills,
-          (SUM(SumHeadshots) / NULLIF(SUM(CountPlayers), 0)) AS averageHeadshots,
-          (SUM(SumDeaths) / NULLIF(SUM(CountPlayers), 0)) AS averageDeaths,
-          (SUM(SumSuicide) / NULLIF(SUM(CountPlayers), 0)) AS averageSuicides,
-          (SUM(SumTKs) / NULLIF(SUM(CountPlayers), 0)) AS averageTeamKills,
+          (SUM(SumScore) / NULLIF(MAX(players.countPlayers), 0)) AS averageScore,
+          (SUM(SumKills) / NULLIF(MAX(players.countPlayers), 0)) AS averageKills,
+          (SUM(SumHeadshots) / NULLIF(MAX(players.countPlayers), 0)) AS averageHeadshots,
+          (SUM(SumDeaths) / NULLIF(MAX(players.countPlayers), 0)) AS averageDeaths,
+          (SUM(SumSuicide) / NULLIF(MAX(players.countPlayers), 0)) AS averageSuicides,
+          (SUM(SumTKs) / NULLIF(MAX(players.countPlayers), 0)) AS averageTeamKills,
           (SUM(SumKills) / NULLIF(SUM(SumDeaths), 0)) AS averageKdr,
           ((SUM(SumHeadshots) / NULLIF(SUM(SumKills), 0)) * 100) AS averageHsr
         FROM tbl_server_stats
+        CROSS JOIN (
+          SELECT COUNT(DISTINCT tsp.PlayerID) AS countPlayers
+          FROM tbl_server_player tsp
+          INNER JOIN tbl_playerstats tps ON tps.StatsID = tsp.StatsID
+          WHERE ${playerScope.sql}
+        ) players
         WHERE ${scope.sql}
       `
       : `
@@ -122,7 +129,7 @@ export async function getServerDetailStats(
         WHERE ${scope.sql}
         LIMIT 1
       `,
-    scope.params
+    hasAllServersScope ? [...playerScope.params, ...scope.params] : scope.params
   );
 
   const row = rows[0];
@@ -215,10 +222,7 @@ export async function listServerDailyPlayerTrend(
   );
 
   return rows.map((row) => ({
-    date:
-      row.dateValue instanceof Date
-        ? row.dateValue.toISOString().slice(0, 10)
-        : String(row.dateValue ?? ""),
+    date: row.dateValue ?? "",
     averagePlayers: toFixedNumber(row.averagePlayers),
     peakPlayers: Number(row.peakPlayers ?? 0),
     roundCount: Number(row.roundCount ?? 0)

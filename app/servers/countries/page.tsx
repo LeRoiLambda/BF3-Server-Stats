@@ -19,8 +19,6 @@ import {
   getAllServersPageScope
 } from "@/src/server/routing/server-pages";
 
-export const revalidate = 30;
-
 type AllServersCountriesPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -30,10 +28,14 @@ export default async function AllServersCountriesPage({
 }: AllServersCountriesPageProps) {
   const scope = await getAllServersPageScope("countries");
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const requestedCodes = (firstValue(resolvedSearchParams.c) ?? "")
-    .split(",")
-    .map((code) => normalizeCountryCode(code))
-    .filter((code): code is string => Boolean(code));
+  const requestedCodes = Array.from(
+    new Set(
+      (firstValue(resolvedSearchParams.c) ?? "")
+        .split(",")
+        .map((code) => normalizeCountryCode(code))
+        .filter((code): code is string => Boolean(code))
+    )
+  );
   const direct = normalizeCountryCode(firstValue(resolvedSearchParams.country));
   const snapshot = await getServerCountriesSnapshot({
     serverIds: scope.serverIds,
@@ -119,7 +121,7 @@ export default async function AllServersCountriesPage({
                           </PlayerTableCellLink>
                         </td>
                         <td className={ui.td}>
-                          <PlayerTableCellLink playerId={player.playerId}>
+                          <PlayerTableCellLink playerId={player.playerId} primary>
                             <PlayerIdentity
                               soldierName={player.soldierName}
                               countryCode={player.countryCode}

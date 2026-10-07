@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
     query: term,
     gameId: context.gameId,
     serverId,
+    serverIds: context.servers.map((server) => server.serverId),
     limit
   });
 
