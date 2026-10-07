@@ -3,11 +3,12 @@ import { getDbPool } from "@/src/server/db/pool";
 import { hasColumn, hasTable } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
-import { toDateTimeString } from "@/src/server/utils/dates";
-import { loggerWallClock } from "@/src/server/utils/logger-clock";
+import { fromLoggerTime, toLoggerTime } from "@/src/server/utils/logger-clock";
+import { formatSiteTime, siteTimeZone } from "@/src/server/utils/site-time";
 import {
-  formatSqlDateTime,
   naiveDateToWallClock,
+  wallClockInTimeZone,
+  wallClockToInstant,
   wallClockToNaiveDate
 } from "@/src/server/utils/time-zones";
 
@@ -29,7 +30,7 @@ export type ChatLogEntry = {
   id: number;
   serverId: number;
   serverName: string | null;
-  logDate: string;
+  logDate: Date | null;
   soldierName: string;
   countryCode: string | null;
   message: string;
@@ -39,8 +40,8 @@ export type ChatLogEntry = {
 };
 
 export type ChatDateRange = {
-  low: string;
-  high: string;
+  low: Date;
+  high: Date;
 };
 
 export type ChatSearchSuggestionKind = "date" | "player" | "message";
@@ -81,7 +82,7 @@ type ChatRow = RowDataPacket & {
   id: number;
   serverId: number;
   serverName: string | null;
-  logDate: string;
+  logDate: string | null;
   soldierName: string | null;
   countryCode: string | null;
   message: string;
@@ -99,13 +100,14 @@ type ChatSuggestionRow = RowDataPacket & {
 const MAX_CHAT_PAGE = 1_000_000;
 
 const DATE_QUERY_PATTERN =
-  /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/;
+  /^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?)?$/;
 const CURRENT_OR_LAST_PERIOD_PATTERN = /^(this|last) (week|month|year)$/;
 const PERIODS_AGO_PATTERN = /^(\d{1,3}) (day|week|month|year)s? ago$/;
 
 type CalendarPeriod = "day" | "week" | "month" | "year";
 
-// Wall-clock range held in Dates whose UTC fields are the wall-clock fields.
+// Range on the site's clock, held in Dates whose UTC fields are the wall-clock
+// fields.
 type WallClockRange = {
   low: Date;
   high: Date;
@@ -189,13 +191,13 @@ function shiftPeriod(date: Date, period: CalendarPeriod, amount: number): Date {
 }
 
 // The whole calendar period (Monday-based for weeks) `periodsAgo` periods
-// before the one containing `now`.
+// before the one containing `date`.
 function calendarPeriodRange(
-  now: Date,
+  date: Date,
   period: CalendarPeriod,
   periodsAgo: number
 ): WallClockRange {
-  const low = shiftPeriod(startOfPeriod(now, period), period, -periodsAgo);
+  const low = shiftPeriod(startOfPeriod(date, period), period, -periodsAgo);
 
   return {
     low,
@@ -203,8 +205,8 @@ function calendarPeriodRange(
   };
 }
 
-// "2024-01-15" matches that day; "2024-01-15 21:30" matches five minutes either
-// side.
+// "2024-01" matches that month, "2024-01-15" that day, and "2024-01-15 21:30"
+// five minutes either side.
 function parseDateQuery(query: string): WallClockRange | null {
   const match = DATE_QUERY_PATTERN.exec(query);
   if (!match) {
@@ -213,7 +215,8 @@ function parseDateQuery(query: string): WallClockRange | null {
 
   const year = Number(match[1]);
   const month = Number(match[2]);
-  const day = Number(match[3]);
+  const hasDay = match[3] !== undefined;
+  const day = hasDay ? Number(match[3]) : 1;
   const hasTime = match[4] !== undefined;
   const hour = hasTime ? Number(match[4]) : 0;
   const minute = hasTime ? Number(match[5]) : 0;
@@ -232,11 +235,12 @@ function parseDateQuery(query: string): WallClockRange | null {
     return null;
   }
 
+  if (!hasDay) {
+    return calendarPeriodRange(date, "month", 0);
+  }
+
   if (!hasTime) {
-    return {
-      low: date,
-      high: addSeconds(date, 86400 - 1)
-    };
+    return calendarPeriodRange(date, "day", 0);
   }
 
   return {
@@ -245,37 +249,28 @@ function parseDateQuery(query: string): WallClockRange | null {
   };
 }
 
-function parseRelativeDateQuery(query: string, now: Date): WallClockRange | null {
-  const normalized = query.toLowerCase().replace(/\s+/g, " ");
-
-  if (normalized === "now" || normalized === "last hour") {
-    return {
-      low: addSeconds(now, -3600),
-      high: now
-    };
+function parseCalendarQuery(query: string, today: Date): WallClockRange | null {
+  if (query === "today") {
+    return calendarPeriodRange(today, "day", 0);
   }
 
-  if (normalized === "today") {
-    return calendarPeriodRange(now, "day", 0);
+  if (query === "yesterday") {
+    return calendarPeriodRange(today, "day", 1);
   }
 
-  if (normalized === "yesterday") {
-    return calendarPeriodRange(now, "day", 1);
-  }
-
-  const currentOrLast = CURRENT_OR_LAST_PERIOD_PATTERN.exec(normalized);
+  const currentOrLast = CURRENT_OR_LAST_PERIOD_PATTERN.exec(query);
   if (currentOrLast) {
     return calendarPeriodRange(
-      now,
+      today,
       currentOrLast[2] as CalendarPeriod,
       currentOrLast[1] === "last" ? 1 : 0
     );
   }
 
-  const periodsAgo = PERIODS_AGO_PATTERN.exec(normalized);
+  const periodsAgo = PERIODS_AGO_PATTERN.exec(query);
   if (periodsAgo) {
     return calendarPeriodRange(
-      now,
+      today,
       periodsAgo[2] as CalendarPeriod,
       Number(periodsAgo[1])
     );
@@ -285,29 +280,37 @@ function parseRelativeDateQuery(query: string, now: Date): WallClockRange | null
 }
 
 // Only queries that parse as dates become date ranges; any other text, such as
-// "ak 47" or "top 10", is matched against names and messages.
+// "ak 47" or "top 10", is matched against names and messages. Dates and
+// periods such as "today" are read on the site's clock, like the times shown.
 export function resolveChatDateRange(query: string | null): ChatDateRange | null {
-  const normalized = query?.trim();
-  if (!normalized) {
+  const trimmed = query?.trim();
+  if (!trimmed) {
     return null;
   }
 
-  // Chat times are on the stats logger's clock.
-  const now = wallClockToNaiveDate(loggerWallClock(new Date()));
+  const phrase = trimmed.toLowerCase().replace(/\s+/g, " ");
+  const now = new Date();
+  if (phrase === "now" || phrase === "last hour") {
+    return {
+      low: addSeconds(now, -3600),
+      high: now
+    };
+  }
+
+  const timeZone = siteTimeZone();
   const range =
-    parseDateQuery(normalized) ?? parseRelativeDateQuery(normalized, now);
+    parseDateQuery(trimmed) ??
+    parseCalendarQuery(phrase, wallClockToNaiveDate(wallClockInTimeZone(now, timeZone)));
   if (!range) {
     return null;
   }
 
-  const high =
-    range.low.getTime() <= now.getTime() && range.high.getTime() > now.getTime()
-      ? now
-      : range.high;
+  const low = wallClockToInstant(naiveDateToWallClock(range.low), timeZone);
+  const high = wallClockToInstant(naiveDateToWallClock(range.high), timeZone);
 
   return {
-    low: formatSqlDateTime(naiveDateToWallClock(range.low)),
-    high: formatSqlDateTime(naiveDateToWallClock(high))
+    low,
+    high: low.getTime() <= now.getTime() && high.getTime() > now.getTime() ? now : high
   };
 }
 
@@ -369,7 +372,7 @@ export async function searchChatSuggestions(
         kind: "date",
         value: query,
         label: "Date range",
-        detail: `${dateRange.low} - ${dateRange.high}`
+        detail: `${formatSiteTime(dateRange.low)} - ${formatSiteTime(dateRange.high)}`
       },
       safeLimit
     );
@@ -424,6 +427,7 @@ export async function searchChatSuggestions(
       continue;
     }
 
+    const lastSeen = fromLoggerTime(row.lastSeen);
     addSuggestion(
       suggestions,
       seen,
@@ -431,7 +435,7 @@ export async function searchChatSuggestions(
         kind: "player",
         value: row.value,
         label: row.value,
-        detail: row.lastSeen ? `Last chat ${toDateTimeString(row.lastSeen)}` : null
+        detail: lastSeen ? `Last chat ${formatSiteTime(lastSeen)}` : null
       },
       safeLimit
     );
@@ -442,6 +446,7 @@ export async function searchChatSuggestions(
       continue;
     }
 
+    const lastSeen = fromLoggerTime(row.lastSeen);
     addSuggestion(
       suggestions,
       seen,
@@ -449,7 +454,7 @@ export async function searchChatSuggestions(
         kind: "message",
         value: row.value,
         label: row.value,
-        detail: row.lastSeen ? `Seen ${toDateTimeString(row.lastSeen)}` : null
+        detail: lastSeen ? `Seen ${formatSiteTime(lastSeen)}` : null
       },
       safeLimit
     );
@@ -484,18 +489,18 @@ export async function getServerChatLog(
   let filterSql = `WHERE ${scope.sql}`;
 
   if (dateRange) {
+    // Chat times are on the stats logger's clock.
     filterSql += " AND cl.logDate BETWEEN ? AND ? ";
-    filterParams.push(dateRange.low, dateRange.high);
+    filterParams.push(toLoggerTime(dateRange.low), toLoggerTime(dateRange.high));
   } else if (query) {
     filterSql += `
       AND (
         ${searchableText("cl.logSoldierName")} LIKE ?
         OR ${searchableText("cl.logMessage")} LIKE ?
-        OR cl.logDate LIKE ?
       )
     `;
     const pattern = containsPattern(query);
-    filterParams.push(pattern, pattern, pattern);
+    filterParams.push(pattern, pattern);
   }
 
   const fetchPageRows = async (targetPage: number) => {
@@ -611,7 +616,7 @@ export async function getServerChatLog(
       id: Number(row.id),
       serverId: Number(row.serverId),
       serverName: row.serverName ?? null,
-      logDate: toDateTimeString(row.logDate) ?? "",
+      logDate: fromLoggerTime(row.logDate),
       soldierName: row.soldierName ?? "",
       countryCode: row.countryCode ?? null,
       message: row.message,

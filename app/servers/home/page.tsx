@@ -13,7 +13,10 @@ import {
   getAllServersWeeklyLeaderboard
 } from "@/src/server/repositories/player-stats-repository";
 import { isServerOnline } from "@/src/server/repositories/server-repository";
-import { getAllServersPageScope } from "@/src/server/routing/server-pages";
+import {
+  getAllServersPageScope,
+  serverSectionHref
+} from "@/src/server/routing/server-pages";
 
 function occupancyPercent(usedSlots: number, maxSlots: number): number {
   if (maxSlots <= 0) {
@@ -70,7 +73,7 @@ export default async function AllServersHomePage() {
             return (
               <Link
                 key={server.serverId}
-                href={`/servers/${server.serverId}`}
+                href={serverSectionHref(server.serverId, "home")}
                 className="group block min-w-0 overflow-hidden rounded-sm border border-slate-600/35 bg-slate-950/65 transition-colors hover:border-slate-400/60"
               >
                 <div className="relative aspect-[992/164] min-h-[62px] bg-slate-900">

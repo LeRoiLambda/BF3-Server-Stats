@@ -2,7 +2,6 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable } from "@/src/server/db/schema";
 import { buildServerScopeCondition } from "@/src/server/repositories/server-scope";
-import { toDateTimeString } from "@/src/server/utils/dates";
 
 export type MapRotationEntry = {
   serverId: number;
@@ -15,7 +14,6 @@ export type MapRotationEntry = {
   isNext: boolean;
   currentRound: number;
   totalRounds: number;
-  updatedAt: string | null;
 };
 
 type MapRotationRow = RowDataPacket & {
@@ -29,7 +27,6 @@ type MapRotationRow = RowDataPacket & {
   isNext: number | boolean | null;
   currentRound: number | null;
   totalRounds: number | null;
-  updatedAt: string | Date | null;
 };
 
 export async function listServerMapRotation(input: {
@@ -55,8 +52,7 @@ export async function listServerMapRotation(input: {
         ml.map_current AS isCurrent,
         ml.map_next AS isNext,
         ml.map_round_current AS currentRound,
-        ml.map_round_total AS totalRounds,
-        ml.maplist_time AS updatedAt
+        ml.map_round_total AS totalRounds
       FROM adkats_maplist ml
       LEFT JOIN tbl_server ts ON ts.ServerID = ml.server_id
       WHERE ${scope.sql}
@@ -75,7 +71,6 @@ export async function listServerMapRotation(input: {
     isCurrent: Boolean(row.isCurrent),
     isNext: Boolean(row.isNext),
     currentRound: Number(row.currentRound ?? 0),
-    totalRounds: Number(row.totalRounds ?? 0),
-    updatedAt: toDateTimeString(row.updatedAt)
+    totalRounds: Number(row.totalRounds ?? 0)
   }));
 }

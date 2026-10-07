@@ -10,8 +10,8 @@ import {
   buildServerScopeCondition,
   type ServerScopeCondition
 } from "@/src/server/repositories/server-scope";
+import { fromLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
-import { toDateTimeString } from "@/src/server/utils/dates";
 
 export type PlayerProfile = {
   playerId: number;
@@ -33,8 +33,8 @@ export type PlayerProfile = {
   losses: number;
   wlr: number;
   highScore: number;
-  firstSeenOnServer: string | null;
-  lastSeenOnServer: string | null;
+  firstSeenOnServer: Date | null;
+  lastSeenOnServer: Date | null;
   banStatus: "active" | "expired" | null;
   banReason: string | null;
   hasStats: boolean;
@@ -398,8 +398,8 @@ export async function getPlayerProfileById(
     losses: Number(row.losses ?? 0),
     wlr: toFixedNumber(row.wlr),
     highScore: Number(row.highScore ?? 0),
-    firstSeenOnServer: toDateTimeString(row.firstSeenOnServer),
-    lastSeenOnServer: toDateTimeString(row.lastSeenOnServer),
+    firstSeenOnServer: fromLoggerTime(row.firstSeenOnServer),
+    lastSeenOnServer: fromLoggerTime(row.lastSeenOnServer),
     banStatus: parseBanStatus(row.banStatus),
     banReason: row.banReason ?? null,
     hasStats: Number(row.statsRows ?? 0) > 0

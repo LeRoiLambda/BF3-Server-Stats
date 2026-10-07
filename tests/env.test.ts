@@ -16,7 +16,7 @@ describe("readEnv", () => {
 
     expect(env.BF3_STATS_DB_PORT).toBe(3306);
     expect(env.BF3_STATS_BANNER_IMAGE).toBe("/images/bf3-logo.png");
-    expect(env.BF3_STATS_WEEK_TIME_ZONE).toBe("America/Los_Angeles");
+    expect(env.BF3_STATS_TIME_ZONE).toBe("America/Los_Angeles");
     expect(env.BF3_STATS_LOGGER_TIME_OFFSET).toBe(0);
   });
 

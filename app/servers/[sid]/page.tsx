@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { RouteAutoRefresh } from "@/components/stats/route-auto-refresh";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { sortableHeadingClass, ui } from "@/components/layout/stats-ui";
@@ -11,7 +10,6 @@ import {
 } from "@/components/stats/player-link";
 import { WeeklyLeaderboardSection } from "@/components/stats/weekly-leaderboard-section";
 import { listServerMapRotation } from "@/src/server/repositories/map-rotation-repository";
-import { getServerContext } from "@/src/server/repositories/server-repository";
 import {
   getWeeklyServerLeaderboard,
   listCurrentPlayersByServer,
@@ -22,11 +20,12 @@ import {
   type CurrentPlayerSort
 } from "@/src/server/repositories/player-stats-repository";
 import { listTeamScores } from "@/src/server/repositories/server-overview-repository";
-
-type ServerHomePageProps = {
-  params: Promise<{ sid: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
+import { firstValue } from "@/src/server/routing/params";
+import {
+  getServerPageScope,
+  serverSectionHref,
+  type ServerPageProps
+} from "@/src/server/routing/server-pages";
 
 const SCOREBOARD_SORT_LABELS: Record<CurrentPlayerSort, string> = {
   soldierName: "Player",
@@ -43,23 +42,6 @@ const SQUAD_DEATHMATCH_TEAM_NAMES: Record<number, string> = {
   4: "Delta"
 };
 
-function parseServerId(rawSid: string): number | null {
-  const parsed = Number.parseInt(rawSid, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function firstValue(value: string | string[] | undefined): string | null {
-  if (Array.isArray(value)) {
-    return value[0] ?? null;
-  }
-
-  return value ?? null;
-}
-
 function nextCurrentPlayerOrder(
   currentSort: CurrentPlayerSort,
   sort: CurrentPlayerSort,
@@ -70,18 +52,6 @@ function nextCurrentPlayerOrder(
   }
 
   return order === "asc" ? "desc" : "asc";
-}
-
-function buildScoreboardHref(
-  serverId: number,
-  sort: CurrentPlayerSort,
-  order: CurrentPlayerOrder
-): string {
-  const params = new URLSearchParams();
-  params.set("scoreboardSort", sort);
-  params.set("scoreboardOrder", order);
-
-  return `/servers/${serverId}?${params.toString()}`;
 }
 
 function liveTeamName(teamId: number, gameMode: string | null): string {
@@ -117,28 +87,15 @@ function groupPlayersByTeam(players: CurrentPlayer[]): Array<{
     }));
 }
 
-export default async function ServerHomePage({
-  params,
-  searchParams
-}: ServerHomePageProps) {
-  const { sid } = await params;
-  const serverId = parseServerId(sid);
-  if (!serverId) {
-    notFound();
-  }
-  const resolvedSearchParams = searchParams ? await searchParams : {};
+export default async function ServerHomePage({ params, searchParams }: ServerPageProps) {
+  const { context, server } = await getServerPageScope(params);
+  const resolvedSearchParams = (await searchParams) ?? {};
   const scoreboardSort = parseCurrentPlayerSort(
     firstValue(resolvedSearchParams.scoreboardSort)
   );
   const scoreboardOrder = parseCurrentPlayerOrder(
     firstValue(resolvedSearchParams.scoreboardOrder)
   );
-
-  const context = await getServerContext();
-  const server = context.servers.find((entry) => entry.serverId === serverId);
-  if (!server) {
-    notFound();
-  }
 
   const [teamScores, weeklyTopPlayers, currentPlayers, mapRotation] =
     await Promise.all([
@@ -162,7 +119,7 @@ export default async function ServerHomePage({
   const teamScoresById = new Map(
     teamScores.map((team) => [team.teamId, team])
   );
-  const fullLeadersHref = `/servers/${server.serverId}/leaders?view=weekly`;
+  const fullLeadersHref = serverSectionHref(server.serverId, "leaders", { view: "weekly" });
 
   return (
     <StatsShell
@@ -226,15 +183,14 @@ export default async function ServerHomePage({
                             <th className={ui.th}>#</th>
                             {(Object.keys(SCOREBOARD_SORT_LABELS) as CurrentPlayerSort[]).map(
                               (sortKey) => {
-                                const href = buildScoreboardHref(
-                                  server.serverId,
-                                  sortKey,
-                                  nextCurrentPlayerOrder(
+                                const href = serverSectionHref(server.serverId, "home", {
+                                  scoreboardSort: sortKey,
+                                  scoreboardOrder: nextCurrentPlayerOrder(
                                     scoreboardSort,
                                     sortKey,
                                     scoreboardOrder
                                   )
-                                );
+                                });
                                 const isActive = scoreboardSort === sortKey;
 
                                 return (

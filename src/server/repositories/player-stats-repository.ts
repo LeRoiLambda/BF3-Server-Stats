@@ -2,15 +2,14 @@ import { RowDataPacket } from "mysql2";
 import { getDbPool } from "@/src/server/db/pool";
 import { hasTable, hasTableRows } from "@/src/server/db/schema";
 import { containsPattern, searchableText } from "@/src/server/db/search";
-import { readEnv } from "@/src/server/env";
 import {
   buildServerScopeCondition,
   type ServerScopeInput
 } from "@/src/server/repositories/server-scope";
-import { loggerWallClock } from "@/src/server/utils/logger-clock";
+import { toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
+import { siteTimeZone } from "@/src/server/utils/site-time";
 import {
-  formatSqlDateTime,
   naiveDateToWallClock,
   wallClockInTimeZone,
   wallClockToInstant,
@@ -146,8 +145,8 @@ function currentWeekWindow(): {
   endSql: string;
   resetAt: string;
 } {
-  const weekTimeZone = readEnv().BF3_STATS_WEEK_TIME_ZONE;
-  const today = wallClockInTimeZone(new Date(), weekTimeZone);
+  const timeZone = siteTimeZone();
+  const today = wallClockInTimeZone(new Date(), timeZone);
   const localStart = wallClockToNaiveDate({
     ...today,
     hour: 0,
@@ -160,12 +159,12 @@ function currentWeekWindow(): {
   const localEnd = new Date(localStart);
   localEnd.setUTCDate(localEnd.getUTCDate() + 7);
 
-  const start = wallClockToInstant(naiveDateToWallClock(localStart), weekTimeZone);
-  const end = wallClockToInstant(naiveDateToWallClock(localEnd), weekTimeZone);
+  const start = wallClockToInstant(naiveDateToWallClock(localStart), timeZone);
+  const end = wallClockToInstant(naiveDateToWallClock(localEnd), timeZone);
   // Session start times are on the stats logger's clock.
   return {
-    startSql: formatSqlDateTime(loggerWallClock(start)),
-    endSql: formatSqlDateTime(loggerWallClock(end)),
+    startSql: toLoggerTime(start),
+    endSql: toLoggerTime(end),
     resetAt: end.toISOString()
   };
 }

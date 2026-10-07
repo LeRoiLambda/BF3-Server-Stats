@@ -5,8 +5,9 @@ import {
   normalizeServerScopeInput,
   type ServerScopeInput
 } from "@/src/server/repositories/server-scope";
+import { fromLoggerTime, toLoggerTime } from "@/src/server/utils/logger-clock";
 import { toFixedNumber } from "@/src/server/utils/numbers";
-import { toDateTimeString } from "@/src/server/utils/dates";
+import { siteDatesBetween, siteDateStart } from "@/src/server/utils/site-time";
 
 export type ServerDetailStats = {
   countPlayers: number;
@@ -26,7 +27,7 @@ export type ServerDetailStats = {
 export type ServerRoundSnapshot = {
   serverId: number;
   serverName: string | null;
-  startedAt: string | null;
+  startedAt: Date | null;
   mapCode: string;
   gamemode: string;
   minPlayers: number;
@@ -36,6 +37,7 @@ export type ServerRoundSnapshot = {
   leftPlayers: number;
 };
 
+// `date` is a "YYYY-MM-DD" date on the site's clock.
 export type ServerDailyPlayersSnapshot = {
   date: string;
   averagePlayers: number;
@@ -71,11 +73,22 @@ type ServerRoundSnapshotRow = RowDataPacket & {
   leftPlayers: number | null;
 };
 
+type LoggerDateRow = RowDataPacket & {
+  loggerDate: string | null;
+};
+
 type ServerDailyPlayersSnapshotRow = RowDataPacket & {
-  dateValue: string | null;
+  siteDate: string | null;
   averagePlayers: number | null;
   peakPlayers: number | null;
   roundCount: number | null;
+};
+
+// A day on the site's clock, with its start and end on the logger's clock.
+type SiteDay = {
+  date: string;
+  start: string;
+  end: string;
 };
 
 export async function getServerDetailStats(
@@ -185,7 +198,7 @@ export async function listRecentServerRounds(
   return rows.map((row) => ({
     serverId: Number(row.serverId),
     serverName: row.serverName ?? null,
-    startedAt: toDateTimeString(row.startedAt),
+    startedAt: fromLoggerTime(row.startedAt),
     mapCode: row.mapCode,
     gamemode: row.gamemode,
     minPlayers: Number(row.minPlayers ?? 0),
@@ -196,6 +209,38 @@ export async function listRecentServerRounds(
   }));
 }
 
+// A day on the site's clock overlaps at most two days on the logger's clock,
+// so the rounds of the latest 2n + 2 logger days with rounds hold at least
+// n + 1 site days with rounds. Only the earliest of those can start before
+// them.
+function loggerDateLimit(siteDayCount: number): number {
+  return siteDayCount * 2 + 2;
+}
+
+// The site's days that overlap the given days on the logger's clock.
+export function siteDaysOverlapping(loggerDates: string[]): SiteDay[] {
+  const dates = new Set<string>();
+
+  for (const loggerDate of loggerDates) {
+    const first = fromLoggerTime(`${loggerDate} 00:00:00`);
+    const last = fromLoggerTime(`${loggerDate} 23:59:59`);
+    if (first && last) {
+      for (const date of siteDatesBetween(first, last)) {
+        dates.add(date);
+      }
+    }
+  }
+
+  return Array.from(dates)
+    .sort()
+    .map((date) => ({
+      date,
+      start: toLoggerTime(siteDateStart(date)),
+      end: toLoggerTime(siteDateStart(date, 1))
+    }));
+}
+
+// The latest `limit` days on the site's clock that had rounds.
 export async function listServerDailyPlayerTrend(
   input: number | ServerScopeInput,
   limit = 7
@@ -203,28 +248,67 @@ export async function listServerDailyPlayerTrend(
   const pool = getDbPool();
   const boundedLimit = Math.max(1, Math.min(31, Math.floor(limit)));
   const scope = buildServerScopeCondition("ServerID", input);
-  const [rows] = await pool.query<ServerDailyPlayersSnapshotRow[]>(
+  const roundsSql = `
+    ${scope.sql}
+    AND Gamemode != ''
+    AND MapName != ''
+    AND TimeMapLoad IS NOT NULL
+  `;
+  const dateLimit = loggerDateLimit(boundedLimit);
+  const [dateRows] = await pool.query<LoggerDateRow[]>(
     `
-      SELECT
-        DATE(TimeMapLoad) AS dateValue,
-        AVG(MaxPlayers) AS averagePlayers,
-        MAX(MaxPlayers) AS peakPlayers,
-        COUNT(*) AS roundCount
+      SELECT DATE(TimeMapLoad) AS loggerDate
       FROM tbl_mapstats
-      WHERE ${scope.sql}
-        AND Gamemode != ''
-        AND MapName != ''
+      WHERE ${roundsSql}
       GROUP BY DATE(TimeMapLoad)
       ORDER BY DATE(TimeMapLoad) DESC
       LIMIT ?
     `,
-    [...scope.params, boundedLimit]
+    [...scope.params, dateLimit]
+  );
+  const loggerDates = dateRows
+    .map((row) => row.loggerDate)
+    .filter((date): date is string => fromLoggerTime(`${date} 00:00:00`) !== null);
+  const days = siteDaysOverlapping(loggerDates);
+  if (days.length === 0) {
+    return [];
+  }
+
+  const since = `${loggerDates[loggerDates.length - 1]} 00:00:00`;
+  const [rows] = await pool.query<ServerDailyPlayersSnapshotRow[]>(
+    `
+      SELECT
+        CASE
+          ${days.map(() => "WHEN TimeMapLoad >= ? AND TimeMapLoad < ? THEN ?").join("\n          ")}
+        END AS siteDate,
+        AVG(MaxPlayers) AS averagePlayers,
+        MAX(MaxPlayers) AS peakPlayers,
+        COUNT(*) AS roundCount
+      FROM tbl_mapstats
+      WHERE ${roundsSql}
+        AND TimeMapLoad >= ?
+      GROUP BY siteDate
+    `,
+    [...days.flatMap((day) => [day.start, day.end, day.date]), ...scope.params, since]
   );
 
-  return rows.map((row) => ({
-    date: row.dateValue ?? "",
-    averagePlayers: toFixedNumber(row.averagePlayers),
-    peakPlayers: Number(row.peakPlayers ?? 0),
-    roundCount: Number(row.roundCount ?? 0)
-  }));
+  // A day that starts before `since` is missing its earlier rounds, unless the
+  // logger has none before `since`.
+  const noEarlierRounds = dateRows.length < dateLimit;
+  const completeDates = new Set(
+    days.filter((day) => noEarlierRounds || day.start >= since).map((day) => day.date)
+  );
+
+  return rows
+    .filter((row): row is ServerDailyPlayersSnapshotRow & { siteDate: string } =>
+      row.siteDate !== null && completeDates.has(row.siteDate)
+    )
+    .sort((a, b) => b.siteDate.localeCompare(a.siteDate))
+    .slice(0, boundedLimit)
+    .map((row) => ({
+      date: row.siteDate,
+      averagePlayers: toFixedNumber(row.averagePlayers),
+      peakPlayers: Number(row.peakPlayers ?? 0),
+      roundCount: Number(row.roundCount ?? 0)
+    }));
 }

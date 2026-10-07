@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { StatsShell } from "@/components/layout/stats-shell";
 import { ui } from "@/components/layout/stats-ui";
+import { DateTime } from "@/components/stats/date-time";
 import {
   PlayerProfileSections,
   type DogtagView,
@@ -325,11 +326,11 @@ export default async function PlayerPage({ params, searchParams }: PlayerPagePro
           </p>
           <p>
             <span className="text-slate-400">First Seen:</span>{" "}
-            {profile.firstSeenOnServer ?? "Unknown"}
+            <DateTime value={profile.firstSeenOnServer} />
           </p>
           <p>
             <span className="text-slate-400">Last Seen:</span>{" "}
-            {profile.lastSeenOnServer ?? "Unknown"}
+            <DateTime value={profile.lastSeenOnServer} />
           </p>
         </div>
       </section>

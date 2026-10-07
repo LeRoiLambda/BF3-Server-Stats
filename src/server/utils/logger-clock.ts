@@ -1,22 +1,45 @@
 import { readEnv } from "@/src/server/env";
 import {
+  formatSqlDateTime,
   naiveDateToWallClock,
+  parseSqlDateTime,
   wallClockInTimeZone,
-  wallClockToNaiveDate,
-  type WallClock
+  wallClockToInstant,
+  wallClockToNaiveDate
 } from "@/src/server/utils/time-zones";
 
 const MS_PER_HOUR = 3_600_000;
 
-// Wall-clock time on the stats logger's clock: the Procon host's local time
-// with the logger's "Servertime Offset" added to it (DateTime.Now.AddHours).
-export function loggerWallClock(date: Date): WallClock {
-  const env = readEnv();
+// The stats logger stamps rows with the Procon host's local time plus its
+// "Servertime Offset" setting (DateTime.Now.AddHours).
+function loggerOffsetMs(): number {
+  return readEnv().BF3_STATS_LOGGER_TIME_OFFSET * MS_PER_HOUR;
+}
+
+// The "YYYY-MM-DD HH:MM:SS" value the stats logger stamps at `instant`.
+export function toLoggerTime(instant: Date): string {
   const hostTime = wallClockToNaiveDate(
-    wallClockInTimeZone(date, env.BF3_STATS_LOGGER_TIME_ZONE)
+    wallClockInTimeZone(instant, readEnv().BF3_STATS_LOGGER_TIME_ZONE)
   );
 
-  return naiveDateToWallClock(
-    new Date(hostTime.getTime() + env.BF3_STATS_LOGGER_TIME_OFFSET * MS_PER_HOUR)
+  return formatSqlDateTime(
+    naiveDateToWallClock(new Date(hostTime.getTime() + loggerOffsetMs()))
+  );
+}
+
+// The instant a value stamped by the stats logger stands for. Zero and
+// malformed values return null. A value from the hour the Procon host's clock
+// goes back maps to one of that hour's two instants.
+export function fromLoggerTime(value: unknown): Date | null {
+  const loggerTime = parseSqlDateTime(value);
+  if (!loggerTime) {
+    return null;
+  }
+
+  const hostTime = new Date(wallClockToNaiveDate(loggerTime).getTime() - loggerOffsetMs());
+
+  return wallClockToInstant(
+    naiveDateToWallClock(hostTime),
+    readEnv().BF3_STATS_LOGGER_TIME_ZONE
   );
 }

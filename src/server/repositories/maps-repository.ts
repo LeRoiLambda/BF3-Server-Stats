@@ -84,7 +84,7 @@ export async function listServerGamemodeBreakdown(
       WHERE ${scope.sql}
         AND Gamemode != ''
       GROUP BY Gamemode
-      ORDER BY totalRounds DESC
+      ORDER BY totalRounds DESC, Gamemode ASC
       LIMIT 8
     `,
     scope.params
@@ -117,7 +117,7 @@ async function listServerMapsByGamemode(
         AND Gamemode = ?
         AND MapName != ''
       GROUP BY MapName
-      ORDER BY numberOfRounds DESC
+      ORDER BY numberOfRounds DESC, MapName ASC
     `,
     [...scope.params, gamemode]
   );
@@ -154,7 +154,7 @@ async function listServerMapCoverage(
           AND Gamemode != ''
           AND MapName != ''
         GROUP BY MapName
-        ORDER BY totalRounds DESC
+        ORDER BY totalRounds DESC, MapName ASC
         LIMIT ?
       `,
       [...scope.params, safeLimit]

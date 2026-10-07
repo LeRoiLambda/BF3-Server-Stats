@@ -91,9 +91,14 @@ will cause startup or request failures.
 | `BF3_STATS_DB_USER` | MySQL user. |
 | `BF3_STATS_DB_PASS` | MySQL password. |
 | `BF3_STATS_BANNER_IMAGE` | Public image path for the header banner, for example `/images/bf3-logo.png`. |
-| `BF3_STATS_WEEK_TIME_ZONE` | IANA timezone used for weekly leaderboard reset calculations, for example `America/Los_Angeles`. |
+| `BF3_STATS_TIME_ZONE` | IANA timezone the site shows times in, for example `Europe/Paris`. Defaults to `America/Los_Angeles`. The daily player trend, the weekly leaderboard's Monday reset and chat searches such as "today" follow it too. |
 | `BF3_STATS_LOGGER_TIME_ZONE` | IANA timezone of the machine running Procon, for example `Europe/Paris` or `UTC`. The stats logger stamps rows with that machine's local time. |
 | `BF3_STATS_LOGGER_TIME_OFFSET` | The stats logger's "Servertime Offset" setting, in hours. Defaults to `0`. |
+
+The stats logger and AdKats store times without a time zone: the logger writes
+the Procon host's local time plus its offset, and AdKats writes UTC. The site
+converts both and shows every time in `BF3_STATS_TIME_ZONE`, followed by the
+zone's abbreviation, such as `PDT`, or its UTC offset, such as `GMT+2`.
 
 ## Available Scripts
 
@@ -158,6 +163,7 @@ node scripts/smoke-test.mjs http://localhost:3000
 app/                         Next.js pages and API routes
 components/                  Shared React components
 components/layout/           Shell, navigation, and UI class helpers
+components/sections/         Section pages shared by the all-servers and per-server routes
 components/search/           Player autocomplete and search widgets
 components/stats/            Stats tables, badges, charts, and profile sections
 src/server/db/               MySQL pool, health check, and table availability checks
@@ -292,11 +298,12 @@ docker build --platform linux/amd64 --target bundle --output dist .
 - Use `/api/health` to confirm database connectivity and active-server context.
 - Use `/api/servers` to inspect which BF3 servers the app considers active.
 - Check `.env.local` when startup fails with an environment validation error.
-- Confirm `BF3_STATS_WEEK_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_ZONE` are valid
-  IANA timezones.
-- If the weekly leaderboard or chat searches such as "today" are off by some
-  hours, check `BF3_STATS_LOGGER_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_OFFSET`
-  against the Procon host and the logger's settings.
+- Confirm `BF3_STATS_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_ZONE` are valid IANA
+  timezones.
+- If chat, round or first and last seen times, the weekly leaderboard or chat
+  searches such as "today" are off by some hours, check
+  `BF3_STATS_LOGGER_TIME_ZONE` and `BF3_STATS_LOGGER_TIME_OFFSET` against the
+  Procon host and the logger's settings.
 - If weekly leaderboards, dogtags, bans, or moderation sections are unavailable,
   check whether the optional tables exist in the database.
 - If images are missing, verify that the referenced files exist under

@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { getServerContext } from "@/src/server/repositories/server-repository";
+import { serverSectionHref } from "@/src/server/routing/server-pages";
 
 export default async function ServersPage() {
   const context = await getServerContext();
 
   if (context.servers.length === 1) {
-    redirect(`/servers/${context.servers[0].serverId}`);
+    redirect(serverSectionHref(context.servers[0].serverId, "home"));
   }
 
   if (context.servers.length > 1) {

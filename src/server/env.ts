@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const DEFAULT_BANNER_IMAGE = "/images/bf3-logo.png";
-const DEFAULT_WEEK_TIME_ZONE = "America/Los_Angeles";
+const DEFAULT_TIME_ZONE = "America/Los_Angeles";
 
 function isValidTimeZone(value: string): boolean {
   try {
@@ -57,13 +57,13 @@ const envSchema = z.object({
       .default(DEFAULT_BANNER_IMAGE)
       .transform(normalizeBannerImagePath)
   ),
-  BF3_STATS_WEEK_TIME_ZONE: z.preprocess(
+  BF3_STATS_TIME_ZONE: z.preprocess(
     blankAsUnset,
     z.string()
       .trim()
       .min(1)
-      .refine(isValidTimeZone, "BF3_STATS_WEEK_TIME_ZONE must be a valid IANA time zone")
-      .default(DEFAULT_WEEK_TIME_ZONE)
+      .refine(isValidTimeZone, "BF3_STATS_TIME_ZONE must be a valid IANA time zone")
+      .default(DEFAULT_TIME_ZONE)
   ),
   BF3_STATS_LOGGER_TIME_ZONE: z.string()
     .trim()
